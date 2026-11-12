@@ -7,10 +7,19 @@ function value(name, fallback = "") {
 
 export const appConfig = Object.freeze({
   networkId: value("VITE_NEAR_NETWORK_ID", "testnet"),
-  rpcUrl: value("VITE_NEAR_RPC_URL", "https://rpc.testnet.near.org"),
-  nftContractId: value("VITE_NFT_CONTRACT_ID"),
-  nuveContractId: value("VITE_NUVE_CONTRACT_ID"),
-  treasuryId: value("VITE_TREASURY_ID"),
+  rpcUrl: value("VITE_NEAR_RPC_URL", "https://rpc.testnet.fastnear.com"),
+  nftContractId: value(
+    "VITE_NFT_CONTRACT_ID",
+    "nuvi-hack26.nvlborc70517034832.testnet",
+  ),
+  nuveContractId: value(
+    "VITE_NUVE_CONTRACT_ID",
+    "nuve-hack26.nvlborc70517034832.testnet",
+  ),
+  treasuryId: value(
+    "VITE_TREASURY_ID",
+    "treasury-hack26.nvlborc70517034832.testnet",
+  ),
   explorerAccountBase: value(
     "VITE_EXPLORER_ACCOUNT_BASE",
     "https://testnet.nearblocks.io/address",

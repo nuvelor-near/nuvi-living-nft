@@ -1,0 +1,49 @@
+{
+  "schema": "nuvi-hackathon-testnet-deployment-v1",
+  "generated_at_utc": "2026-11-12T18:48:54.367Z",
+  "network_id": "testnet",
+  "rpc_url": "https://rpc.testnet.fastnear.com",
+  "parent_account_id": "nvlborc70517034832.testnet",
+  "living_nft_account_id": "nuvi-hack26.nvlborc70517034832.testnet",
+  "nuve_ft_account_id": "nuve-hack26.nvlborc70517034832.testnet",
+  "treasury_account_id": "treasury-hack26.nvlborc70517034832.testnet",
+  "e2e_player_account_id": "player-hack26.nvlborc70517034832.testnet",
+  "living_nft_wasm": {
+    "sha256": "64d4a735a029ffcc75bcd70c5498bc317426df60d4b2f57afbf86d76871b3813",
+    "size_bytes": 683959
+  },
+  "nuve_ft_wasm": {
+    "sha256": "c176a91f96007958564470f9a6e783fe6e3ef5ffbfe1b040dda1188db90c9f0e",
+    "size_bytes": 217437
+  },
+  "verified": {
+    "nuve_owner_id": "nvlborc70517034832.testnet",
+    "reward_minter_id": "nuvi-hack26.nvlborc70517034832.testnet",
+    "living_game_config": {
+      "nuve_ft_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "treasury_id": "treasury-hack26.nvlborc70517034832.testnet",
+      "nuve_decimals": 4,
+      "feed_cost": "50000",
+      "work_cost": "100000",
+      "feed_duration_ns": 30000000000,
+      "work_duration_ns": 10000000000,
+      "mutation_threshold_xp": 5
+    },
+    "living_code_sha256": "64d4a735a029ffcc75bcd70c5498bc317426df60d4b2f57afbf86d76871b3813",
+    "nuve_code_sha256": "c176a91f96007958564470f9a6e783fe6e3ef5ffbfe1b040dda1188db90c9f0e",
+    "account_balances_yocto": {
+      "nvlborc70517034832.testnet": "1726732288641523299999999",
+      "nuvi-hack26.nvlborc70517034832.testnet": "7294826736932385100000000",
+      "nuve-hack26.nvlborc70517034832.testnet": "2599436864640628600000000",
+      "treasury-hack26.nvlborc70517034832.testnet": "300000000000000000000000",
+      "player-hack26.nvlborc70517034832.testnet": "800000000000000000000000"
+    }
+  },
+  "transactions": [
+    {
+      "step": "register_ft_storage",
+      "account_id": "treasury-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "CcHHV3DGYwQG7V9iLV1EyYYHMV4P6wW2Qca71igEbiA6"
+    }
+  ]
+}

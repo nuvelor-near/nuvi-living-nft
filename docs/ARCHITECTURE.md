@@ -40,11 +40,35 @@ Implemented:
 - responsive mobile layout;
 - generated form asset sync into public `/forms/`.
 
+## Testnet execution
+
+Live isolated accounts:
+
+- Living NFT: `nuvi-hack26.nvlborc70517034832.testnet`
+- NUVE FT: `nuve-hack26.nvlborc70517034832.testnet`
+- Treasury: `treasury-hack26.nvlborc70517034832.testnet`
+- E2E player: `player-hack26.nvlborc70517034832.testnet`
+
+Verified:
+
+- deployed WASM readback against local SHA-256 — PASS;
+- FT storage prerequisites — PASS;
+- starter NUVI + starter NUVE — PASS;
+- Feed/Sponsor + asynchronous NUVE reward — PASS;
+- Work A/B through both Sponsor and Burn routes — PASS;
+- XP threshold and on-chain mutation preview — PASS;
+- same-token mutation to Form B — PASS;
+- Global Alignment and NUVE supply arithmetic — PASS.
+
+Public machine evidence lives in `deployments/`.
+
 Next critical gate:
 
-- isolated Testnet account binding and deployment;
-- real wallet E2E transactions;
-- screenshots/video and submission evidence.
+- add final generated form images;
+- publish the static web client;
+- set collection `base_uri` to the public `/forms` directory;
+- verify wallet/browser demo against the deployed Testnet contracts;
+- capture screenshots/video and submission evidence.
 
 ## Testnet sponsor
 

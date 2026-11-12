@@ -18,9 +18,16 @@ Hackathon differences are deliberate:
 - no NUVELOR production backend;
 - no production contract IDs.
 
-## Configure
+## Live Testnet configuration
 
-Copy `.env.example` to `.env.local` and set the three isolated Hackathon Testnet account IDs after deployment.
+Committed defaults point to the isolated Hackathon deployment:
+
+- NFT: `nuvi-hack26.nvlborc70517034832.testnet`
+- NUVE: `nuve-hack26.nvlborc70517034832.testnet`
+- Treasury: `treasury-hack26.nvlborc70517034832.testnet`
+- RPC: `https://rpc.testnet.fastnear.com`
+
+Copy `.env.example` to `.env.local` only when overriding these public values.
 
 ## Forms
 
@@ -42,3 +49,5 @@ npm test
 npm run build
 npm run dev
 ```
+
+The contract defaults are live, so the built client can read Testnet state without a local environment file.

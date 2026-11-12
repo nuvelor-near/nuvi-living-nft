@@ -40,11 +40,11 @@ Implemented and source-tested:
 - Starter NUVI / contract state V7:
   each NEAR account may self-claim one free Common/Basic NUVI;
 - Dynamic NFT media:
-  starter metadata derives `basic.png`, `form_a.png` or `form_b.png` from the LivingState form and collection `base_uri` while preserving the same token ID;
+  starter metadata derives `basic.png`, `form_a.png` or `form_b.png` from LivingState and collection `base_uri` while preserving the same token ID;
 - Hackathon web client:
   Testnet wallet connection derived from the production-tested NUVELOR `@hot-labs/near-connect` path, direct NEAR RPC reads, starter claims, gameplay, mutation, Global Alignment and explorer evidence.
 
-Current acceptance:
+Current source acceptance:
 
 - Living NFT unit tests: **81/81 PASS**
 - NUVE FT unit tests: **8/8 PASS**
@@ -53,6 +53,35 @@ Current acceptance:
 - Web preview smoke: **PASS**
 - Testnet RPC: **PASS**
 - Production-boundary audit: **PASS**
+
+## Live Testnet deployment
+
+The isolated Hackathon contracts are live on NEAR Testnet:
+
+- Living NFT: `nuvi-hack26.nvlborc70517034832.testnet`
+- NUVE FT: `nuve-hack26.nvlborc70517034832.testnet`
+- Treasury: `treasury-hack26.nvlborc70517034832.testnet`
+- E2E player: `player-hack26.nvlborc70517034832.testnet`
+
+The deployed code was read back from chain and matches the locally accepted WASM SHA-256 values.
+
+A real Testnet E2E has passed:
+
+`starter NUVI → starter 100 NUVE → Feed/Sponsor → Feed reward → 5 Work actions across Sponsor/Burn → XP 5 → mutation`
+
+Observed final state for token `#1`:
+
+- same NEP-171 token ID: `1`
+- final form: `form_b`
+- XP: `5`
+- Work A / Work B affinity: `3 / 2`
+- Sponsor / Burner spend: `35 / 20 NUVE`
+- mutation preview before execution: `57.14% Form A / 42.86% Form B`
+- Global Alignment: `35 NUVE Treasury / 20 NUVE Burn`
+- player balance: `46 NUVE`
+- total NUVE supply after two 10 NUVE burns: `81 NUVE`
+
+Machine-readable evidence is committed under `deployments/testnet.json` and `deployments/e2e-testnet.json`.
 
 The generated form images are intentionally separate from code. Add them under `assets/forms/` as `basic.png`, `form_a.png`, and `form_b.png`.
 
@@ -68,7 +97,8 @@ The private NUVELOR production repository remains separate. This repository must
 - `services/testnet-sponsor` — optional bounded guest onboarding
 - `packages/shared` — shared public types/helpers
 - `assets/forms` — generated public form images
+- `deployments` — public Testnet deployment/E2E evidence
 - `docs` — architecture, provenance, security and economy
 - `scripts` — reproducible build/deploy/test helpers
 
-See `docs/HACKATHON_BASELINE.md`, `docs/DYNAMIC_MEDIA_V1.md` and `docs/WEB_DEMO_V1.md`.
+See `docs/HACKATHON_BASELINE.md`, `docs/DYNAMIC_MEDIA_V1.md`, `docs/WEB_DEMO_V1.md` and `docs/TESTNET_E2E_V1.md`.

@@ -1,0 +1,209 @@
+{
+  "schema": "nuvi-hackathon-testnet-e2e-v1",
+  "generated_at_utc": "2026-11-12T18:52:11.791Z",
+  "network_id": "testnet",
+  "player_account_id": "player-hack26.nvlborc70517034832.testnet",
+  "living_nft_account_id": "nuvi-hack26.nvlborc70517034832.testnet",
+  "nuve_ft_account_id": "nuve-hack26.nvlborc70517034832.testnet",
+  "treasury_account_id": "treasury-hack26.nvlborc70517034832.testnet",
+  "token_id": "1",
+  "starter_claims": {
+    "nuvi": true,
+    "nuve": true
+  },
+  "mutation_preview_before": {
+    "token_id": "1",
+    "eligible": true,
+    "current_form_id": "basic",
+    "mutation_stage": 0,
+    "xp": 5,
+    "threshold_xp": 5,
+    "work_a_xp": 3,
+    "work_b_xp": 2,
+    "sponsor_level": 2,
+    "burner_level": 2,
+    "form_a_weight": 80,
+    "form_b_weight": 60,
+    "form_a_probability_bps": 5714,
+    "form_b_probability_bps": 4286
+  },
+  "final_token": {
+    "token_id": "1",
+    "owner_id": "player-hack26.nvlborc70517034832.testnet",
+    "metadata": {
+      "title": "NUVI Starter",
+      "description": "Nuvi is a mysterious creature powered by NUVELOR energy. It farms NUVE and evolves with the player.",
+      "media": null,
+      "media_hash": null,
+      "copies": 1,
+      "issued_at": 1794509381457226500,
+      "expires_at": null,
+      "starts_at": null,
+      "updated_at": null,
+      "extra": "{\"type\":\"Mascot\",\"character\":\"Nuvi\",\"base_rarity\":\"Common\",\"form_id\":\"form_b\",\"level\":1,\"xp\":5,\"mutation_count\":1,\"work_a_xp\":3,\"work_b_xp\":2,\"sponsor_spent\":\"350000\",\"burner_spent\":\"200000\",\"active_action\":null,\"ready_at_ns\":0}",
+      "reference": null,
+      "reference_hash": null
+    },
+    "approved_account_ids": {}
+  },
+  "final_living_state": {
+    "form_id": "form_b",
+    "level": 1,
+    "xp": 5,
+    "specialization": null,
+    "mutation_count": 1,
+    "work_a_xp": 3,
+    "work_b_xp": 2,
+    "sponsor_spent": "350000",
+    "burner_spent": "200000",
+    "active_action": null,
+    "ready_at_ns": 0
+  },
+  "final_mutation_preview": {
+    "token_id": "1",
+    "eligible": false,
+    "current_form_id": "form_b",
+    "mutation_stage": 1,
+    "xp": 5,
+    "threshold_xp": 5,
+    "work_a_xp": 3,
+    "work_b_xp": 2,
+    "sponsor_level": 2,
+    "burner_level": 2,
+    "form_a_weight": 80,
+    "form_b_weight": 60,
+    "form_a_probability_bps": 5714,
+    "form_b_probability_bps": 4286
+  },
+  "global_alignment": {
+    "treasury_total": "350000",
+    "burn_total": "200000",
+    "global_total": "550000",
+    "treasury_share_bps": 6363,
+    "burn_share_bps": 3637
+  },
+  "balances": {
+    "player_nuve": "460000",
+    "treasury_nuve": "350000",
+    "total_supply": "810000"
+  },
+  "transactions": [
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "2Txp4EB5k6rVT2DHzbBiJjz1SPNkLcFpsbK4szM7ruZM",
+      "token_id": "1",
+      "action": "feed"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "CxyjC4MpcXxEomvYubgNX6Xsu4dm6mLnCNRs7o6Di4yu",
+      "token_id": "1",
+      "action": "work_a",
+      "route": "sponsor",
+      "amount": "100000"
+    },
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "77R7Mj69NJLxFRUebkF2pwniSfYVgHaJSWVNa167Wru",
+      "token_id": "1",
+      "action": "work_a"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "FHp7j8nnXSDSPzfZ5srWX2xtNjnfxNgqEsfAYWNJqQbX",
+      "token_id": "1",
+      "action": "work_a",
+      "route": "sponsor",
+      "amount": "100000"
+    },
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "4fpkpC5996WRYbnEQcGpPPsPYtyUipDqKhXmHHCqWe4R",
+      "token_id": "1",
+      "action": "work_a"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "FE5KBJ173wKm7bP5bDiHuJ9QK9sw7sRpFqAWrfJb7zzE",
+      "token_id": "1",
+      "action": "work_b",
+      "route": "burn",
+      "amount": "100000"
+    },
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "7HNy4T2GFkfqZ5kwL3Hp9RMA1tLHox2eQr8KDeT1Rsmk",
+      "token_id": "1",
+      "action": "work_b"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "EZgKbBqf4MGpkzATyUbGerKRXMfh4XgWZgueBbWRnjf5",
+      "token_id": "1",
+      "action": "work_b",
+      "route": "burn",
+      "amount": "100000"
+    },
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "sE1EymbWKZfrQa5NZBqjny6EJCHBWSHTBf2a9Ldwt66",
+      "token_id": "1",
+      "action": "work_b"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "D4UgBoEzpmnMhgzuEmbk71Q9SFNhjmTvSgd97JP5C8ai",
+      "token_id": "1",
+      "action": "work_a",
+      "route": "sponsor",
+      "amount": "100000"
+    },
+    {
+      "method": "complete_living_action",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "3kw3DTWzeBzoKRrYPbE2qJiST5Q4TKZ4qyNhFyZH1n2B",
+      "token_id": "1",
+      "action": "work_a"
+    },
+    {
+      "method": "mutate",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "GdZRFghKgMzBoRV3W19TsDbkSafzKa59fUNTi39W1bYF",
+      "token_id": "1",
+      "form_a_probability_bps": 5714,
+      "form_b_probability_bps": 4286
+    }
+  ],
+  "bootstrap_transactions": [
+    {
+      "step": "register_player_ft_storage",
+      "tx_hash": "7VPTweHYcVLTs7zXM2EfPorbcQWcYgbuiSMufENGizWK",
+      "verified_success": true
+    },
+    {
+      "step": "claim_starter_nuvi",
+      "tx_hash": "7REoX7JwT5rvgnKxYKfj1fs7xU2FnVJTgxfEC8imLk3z",
+      "verified_success": true
+    },
+    {
+      "step": "claim_starter_nuve",
+      "tx_hash": "35jQYkoAqJKNTxufttkXAMx64aUusnWdocFyetLAKqeE",
+      "verified_success": true
+    },
+    {
+      "step": "feed_sponsor_start",
+      "tx_hash": "8Pf2wLKMPr7FvkV4v1GSoGCVcgBbu158Phb6ey1T5619",
+      "verified_success": true
+    }
+  ]
+}

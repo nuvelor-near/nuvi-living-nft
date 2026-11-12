@@ -39,4 +39,14 @@ Weights are calculated on-chain:
 
 Mutation V1 is weighted random and single-use. It preserves `token_id`; XP is not consumed because repeated-mutation/XP-consumption rules are outside the agreed MVP.
 
-Aggregate Treasury/Burn behavior is planned to form **Global Alignment**.
+## Global Alignment base
+
+Contract state V6 records only successfully routed NUVE:
+
+`global_total = global_treasury_total + global_burn_total`
+
+`get_global_alignment()` returns both totals plus Treasury/Burn shares in basis points.
+
+At zero activity both shares are reported as zero. After activity, the two shares sum to 10,000 bps.
+
+The previously planned **bounded community influence on mutation** is not enabled yet because its exact bonus cap was not fixed in the agreed MVP. Until that bounded influence is implemented and accepted, the project does not claim the Memecoins With Mechanics track.

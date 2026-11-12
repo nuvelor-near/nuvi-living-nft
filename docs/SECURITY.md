@@ -58,3 +58,12 @@ Implemented:
 - one MVP mutation only;
 - `token_id` is preserved;
 - mutation randomness is explicitly gameplay-grade and is not used for financial settlement.
+
+## Global Alignment Base
+
+Implemented:
+
+- only a verified successful Treasury/Burn route callback increments global totals;
+- failed/refunded routes do not affect global totals;
+- a pending settlement is consumed before it can be counted again, preventing ordinary callback replay from double-counting;
+- Global Alignment is currently observational only and does not yet alter financial or mutation outcomes.

@@ -23,6 +23,7 @@ const STATE_VERSION_V2: u32 = 2;
 const STATE_VERSION_V3: u32 = 3;
 const STATE_VERSION_V4: u32 = 4;
 const STATE_VERSION_V5: u32 = 5;
+const STATE_VERSION_V6: u32 = 6;
 const MAX_CLASS_ID_BYTES: usize = 64;
 const BPS_DENOMINATOR: u32 = 10_000;
 const GAS_FOR_NFT_ON_TRANSFER: Gas = Gas::from_tgas(30);
@@ -192,10 +193,39 @@ struct ContractV4 {
     living_state_by_id: LookupMap<TokenId, LivingState>,
 }
 
+#[derive(BorshDeserialize, BorshSerialize)]
+struct ContractV5 {
+    owner_id: AccountId,
+    proposed_owner_id: Option<AccountId>,
+    metadata: LazyOption<NFTContractMetadata>,
+    tokens_by_id: LookupMap<TokenId, Token>,
+    token_ids: UnorderedSet<TokenId>,
+    tokens_per_owner: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    token_metadata_by_id: LookupMap<TokenId, TokenMetadata>,
+    approvals_by_id: LookupMap<TokenId, HashMap<AccountId, ApprovalId>>,
+    next_approval_id_by_id: LookupMap<TokenId, ApprovalId>,
+    royalties_by_id: LookupMap<TokenId, RoyaltyConfig>,
+    next_token_id: u64,
+    admins: UnorderedSet<AccountId>,
+    permissions_by_account: LookupMap<AccountId, PermissionSet>,
+    pause_flags: PauseFlags,
+    config: ContractConfig,
+    storage_deposits: LookupMap<AccountId, u128>,
+    state_version: u32,
+    class_max_supply_by_id: LookupMap<ClassId, u32>,
+    token_class_by_id: LookupMap<TokenId, TokenClass>,
+    class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
+    living_state_by_id: LookupMap<TokenId, LivingState>,
+    nuve_ft_id: AccountId,
+    treasury_id: AccountId,
+    pending_living_payment_by_token: LookupMap<TokenId, PendingLivingPayment>,
+    next_living_settlement_id: u64,
+}
+
 #[near(
     contract_state,
     contract_metadata(
-        version = "5.0.0",
+        version = "6.0.0",
         link = "https://nuvelor.gg",
         standard(standard = "nep330", version = "1.1.0"),
         standard(standard = "nep171", version = "1.0.0"),
@@ -234,6 +264,8 @@ pub struct Contract {
     pub treasury_id: AccountId,
     pub pending_living_payment_by_token: LookupMap<TokenId, PendingLivingPayment>,
     pub next_living_settlement_id: u64,
+    pub global_treasury_total: u128,
+    pub global_burn_total: u128,
 }
 
 #[near_bindgen]
@@ -264,7 +296,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v2_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v2_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV2 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V2 contract state"));
 
@@ -292,7 +324,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V5,
+            state_version: STATE_VERSION_V6,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
@@ -303,6 +335,8 @@ impl Contract {
                 StorageKey::PendingLivingPaymentByToken,
             ),
             next_living_settlement_id: 1,
+            global_treasury_total: 0,
+            global_burn_total: 0,
         };
 
         contract.initialize_living_states_for_existing_tokens();
@@ -310,7 +344,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v3_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v3_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV3 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V3 contract state"));
 
@@ -338,7 +372,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V5,
+            state_version: STATE_VERSION_V6,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
@@ -349,6 +383,8 @@ impl Contract {
                 StorageKey::PendingLivingPaymentByToken,
             ),
             next_living_settlement_id: 1,
+            global_treasury_total: 0,
+            global_burn_total: 0,
         };
 
         contract.initialize_living_states_for_existing_tokens();
@@ -356,7 +392,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v4_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v4_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV4 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V4 contract state"));
 
@@ -384,7 +420,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V5,
+            state_version: STATE_VERSION_V6,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
@@ -395,6 +431,51 @@ impl Contract {
                 StorageKey::PendingLivingPaymentByToken,
             ),
             next_living_settlement_id: 1,
+            global_treasury_total: 0,
+            global_burn_total: 0,
+        }
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate_v5_to_v6() -> Self {
+        let old: ContractV5 = env::state_read()
+            .unwrap_or_else(|| env::panic_str("Cannot deserialize V5 contract state"));
+
+        assert_eq!(old.state_version, STATE_VERSION_V5, "Expected V5 state");
+        assert_eq!(
+            env::predecessor_account_id(),
+            old.owner_id,
+            "Caller is not authorized to migrate"
+        );
+
+        Self {
+            owner_id: old.owner_id,
+            proposed_owner_id: old.proposed_owner_id,
+            metadata: old.metadata,
+            tokens_by_id: old.tokens_by_id,
+            token_ids: old.token_ids,
+            tokens_per_owner: old.tokens_per_owner,
+            token_metadata_by_id: old.token_metadata_by_id,
+            approvals_by_id: old.approvals_by_id,
+            next_approval_id_by_id: old.next_approval_id_by_id,
+            royalties_by_id: old.royalties_by_id,
+            next_token_id: old.next_token_id,
+            admins: old.admins,
+            permissions_by_account: old.permissions_by_account,
+            pause_flags: old.pause_flags,
+            config: old.config,
+            storage_deposits: old.storage_deposits,
+            state_version: STATE_VERSION_V6,
+            class_max_supply_by_id: old.class_max_supply_by_id,
+            token_class_by_id: old.token_class_by_id,
+            class_token_by_serial: old.class_token_by_serial,
+            living_state_by_id: old.living_state_by_id,
+            nuve_ft_id: old.nuve_ft_id,
+            treasury_id: old.treasury_id,
+            pending_living_payment_by_token: old.pending_living_payment_by_token,
+            next_living_settlement_id: old.next_living_settlement_id,
+            global_treasury_total: 0,
+            global_burn_total: 0,
         }
     }
 
@@ -661,6 +742,22 @@ impl Contract {
             feed_duration_ns: FEED_DURATION_NS,
             work_duration_ns: WORK_DURATION_NS,
             mutation_threshold_xp: MUTATION_THRESHOLD_XP,
+        }
+    }
+
+    pub fn get_global_alignment(&self) -> GlobalAlignmentView {
+        let global_total = self
+            .global_treasury_total
+            .saturating_add(self.global_burn_total);
+        let (treasury_share_bps, burn_share_bps) =
+            global_alignment_bps(self.global_treasury_total, self.global_burn_total);
+
+        GlobalAlignmentView {
+            treasury_total: U128(self.global_treasury_total),
+            burn_total: U128(self.global_burn_total),
+            global_total: U128(global_total),
+            treasury_share_bps,
+            burn_share_bps,
         }
     }
 
@@ -961,6 +1058,33 @@ impl Contract {
             );
             return amount;
         }
+
+        match pending.route {
+            EconomicRoute::Sponsor => {
+                self.global_treasury_total = self
+                    .global_treasury_total
+                    .checked_add(pending.amount)
+                    .expect("Global Treasury total overflow");
+            }
+            EconomicRoute::Burn => {
+                self.global_burn_total = self
+                    .global_burn_total
+                    .checked_add(pending.amount)
+                    .expect("Global Burn total overflow");
+            }
+        }
+
+        let alignment = self.get_global_alignment();
+        events::log_event(
+            "global_alignment_updated",
+            serde_json::json!({
+                "treasury_total": alignment.treasury_total,
+                "burn_total": alignment.burn_total,
+                "global_total": alignment.global_total,
+                "treasury_share_bps": alignment.treasury_share_bps,
+                "burn_share_bps": alignment.burn_share_bps,
+            }),
+        );
 
         let Some(mut state) = self.living_state_by_id.get(&token_id) else {
             self.pending_living_payment_by_token.remove(&token_id);
@@ -1629,7 +1753,7 @@ impl Contract {
             pause_flags: PauseFlags::default(),
             config: contract_config,
             storage_deposits: LookupMap::new(StorageKey::StorageDeposits),
-            state_version: STATE_VERSION_V5,
+            state_version: STATE_VERSION_V6,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
@@ -1640,6 +1764,8 @@ impl Contract {
                 StorageKey::PendingLivingPaymentByToken,
             ),
             next_living_settlement_id: 1,
+            global_treasury_total: 0,
+            global_burn_total: 0,
         }
     }
 

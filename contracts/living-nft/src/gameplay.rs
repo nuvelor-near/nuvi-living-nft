@@ -90,6 +90,16 @@ pub struct LivingGameConfigView {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(crate = "near_sdk::serde")]
+pub struct GlobalAlignmentView {
+    pub treasury_total: U128,
+    pub burn_total: U128,
+    pub global_total: U128,
+    pub treasury_share_bps: u32,
+    pub burn_share_bps: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(crate = "near_sdk::serde")]
 pub struct MutationPreviewView {
     pub token_id: TokenId,
     pub eligible: bool,
@@ -154,4 +164,14 @@ pub fn mutation_probability_bps(form_a_weight: u64, form_b_weight: u64) -> (u32,
 
     let form_a_bps = ((form_a_weight as u128) * 10_000u128 / (total as u128)) as u32;
     (form_a_bps, 10_000u32 - form_a_bps)
+}
+
+pub fn global_alignment_bps(treasury_total: u128, burn_total: u128) -> (u32, u32) {
+    let global_total = treasury_total.saturating_add(burn_total);
+    if global_total == 0 {
+        return (0, 0);
+    }
+
+    let treasury_share_bps = (treasury_total.saturating_mul(10_000u128) / global_total) as u32;
+    (treasury_share_bps, 10_000u32 - treasury_share_bps)
 }

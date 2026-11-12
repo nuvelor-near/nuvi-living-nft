@@ -14,7 +14,7 @@ Core:
 - **Games With Real Economies**
 - **Open Innovation**
 
-Conditional after implementation and acceptance of the Global NUVE mechanic:
+Conditional after implementation and acceptance of the Global NUVE community influence mechanic:
 
 - **Memecoins With Mechanics**
 
@@ -36,11 +36,15 @@ Implemented and source-tested:
 - Living Actions V1:
   ready Work A/B actions award XP and affinity; ready Feed actions mint a retry-safe 1 NUVE reward before the timer is cleared;
 - Mutation V1:
-  at 5 XP the current owner gets an on-chain Form A/Form B probability preview and may perform the single MVP mutation without changing `token_id`.
+  at 5 XP the current owner gets an on-chain Form A/Form B probability preview and may perform the single MVP mutation without changing `token_id`;
+- Global Alignment Base / contract state V6:
+  successful Treasury/Burn routes accumulate global NUVE totals and canonical basis-point shares.
+
+The bounded Global Alignment bonus that will influence mutation is intentionally still pending; the repository does not claim the Memecoins With Mechanics track yet.
 
 The private NUVELOR production repository remains separate. This repository must never contain production secrets, private infrastructure configuration, AI_MEMORY data, deploy credentials, or private keys.
 
-See `docs/LIVING_STATE_V1.md`, `docs/NUVE_FT_V1.md`, `docs/LIVING_SETTLEMENT_V1.md`, `docs/LIVING_ACTIONS_V1.md` and `docs/MUTATION_V1.md`.
+See the implementation notes under `docs/`, including `GLOBAL_ALIGNMENT_V1.md`.
 
 ## Planned repository structure
 

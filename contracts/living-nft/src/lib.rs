@@ -1,4 +1,5 @@
 pub mod events;
+pub mod living;
 pub mod types;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -12,10 +13,12 @@ use near_sdk::{
 };
 use std::collections::{HashMap, HashSet};
 
+pub use crate::living::*;
 pub use crate::types::*;
 
 const STATE_VERSION_V2: u32 = 2;
 const STATE_VERSION_V3: u32 = 3;
+const STATE_VERSION_V4: u32 = 4;
 const MAX_CLASS_ID_BYTES: usize = 64;
 const BPS_DENOMINATOR: u32 = 10_000;
 const GAS_FOR_NFT_ON_TRANSFER: Gas = Gas::from_tgas(30);
@@ -40,6 +43,7 @@ pub enum StorageKey {
     ClassMaxSupplyById,
     TokenClassById,
     ClassTokenBySerial,
+    LivingStateById,
 }
 
 #[ext_contract(ext_nft_receiver)]
@@ -107,10 +111,34 @@ struct ContractV2 {
     state_version: u32,
 }
 
+#[derive(BorshDeserialize, BorshSerialize)]
+struct ContractV3 {
+    owner_id: AccountId,
+    proposed_owner_id: Option<AccountId>,
+    metadata: LazyOption<NFTContractMetadata>,
+    tokens_by_id: LookupMap<TokenId, Token>,
+    token_ids: UnorderedSet<TokenId>,
+    tokens_per_owner: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    token_metadata_by_id: LookupMap<TokenId, TokenMetadata>,
+    approvals_by_id: LookupMap<TokenId, HashMap<AccountId, ApprovalId>>,
+    next_approval_id_by_id: LookupMap<TokenId, ApprovalId>,
+    royalties_by_id: LookupMap<TokenId, RoyaltyConfig>,
+    next_token_id: u64,
+    admins: UnorderedSet<AccountId>,
+    permissions_by_account: LookupMap<AccountId, PermissionSet>,
+    pause_flags: PauseFlags,
+    config: ContractConfig,
+    storage_deposits: LookupMap<AccountId, u128>,
+    state_version: u32,
+    class_max_supply_by_id: LookupMap<ClassId, u32>,
+    token_class_by_id: LookupMap<TokenId, TokenClass>,
+    class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
+}
+
 #[near(
     contract_state,
     contract_metadata(
-        version = "3.0.0",
+        version = "4.0.0",
         link = "https://nuvelor.gg",
         standard(standard = "nep330", version = "1.1.0"),
         standard(standard = "nep171", version = "1.0.0"),
@@ -144,6 +172,7 @@ pub struct Contract {
     pub class_max_supply_by_id: LookupMap<ClassId, u32>,
     pub token_class_by_id: LookupMap<TokenId, TokenClass>,
     pub class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
+    pub living_state_by_id: LookupMap<TokenId, LivingState>,
 }
 
 #[near_bindgen]
@@ -170,9 +199,10 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v2_to_v3() -> Self {
+    pub fn migrate_v2_to_v4() -> Self {
         let old: ContractV2 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V2 contract state"));
+
         assert_eq!(old.state_version, STATE_VERSION_V2, "Expected V2 state");
         assert_eq!(
             env::predecessor_account_id(),
@@ -180,7 +210,7 @@ impl Contract {
             "Caller is not authorized to migrate"
         );
 
-        Self {
+        let mut contract = Self {
             owner_id: old.owner_id,
             proposed_owner_id: old.proposed_owner_id,
             metadata: old.metadata,
@@ -197,11 +227,55 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V3,
+            state_version: STATE_VERSION_V4,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
-        }
+            living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
+        };
+
+        contract.initialize_living_states_for_existing_tokens();
+        contract
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate_v3_to_v4() -> Self {
+        let old: ContractV3 = env::state_read()
+            .unwrap_or_else(|| env::panic_str("Cannot deserialize V3 contract state"));
+
+        assert_eq!(old.state_version, STATE_VERSION_V3, "Expected V3 state");
+        assert_eq!(
+            env::predecessor_account_id(),
+            old.owner_id,
+            "Caller is not authorized to migrate"
+        );
+
+        let mut contract = Self {
+            owner_id: old.owner_id,
+            proposed_owner_id: old.proposed_owner_id,
+            metadata: old.metadata,
+            tokens_by_id: old.tokens_by_id,
+            token_ids: old.token_ids,
+            tokens_per_owner: old.tokens_per_owner,
+            token_metadata_by_id: old.token_metadata_by_id,
+            approvals_by_id: old.approvals_by_id,
+            next_approval_id_by_id: old.next_approval_id_by_id,
+            royalties_by_id: old.royalties_by_id,
+            next_token_id: old.next_token_id,
+            admins: old.admins,
+            permissions_by_account: old.permissions_by_account,
+            pause_flags: old.pause_flags,
+            config: old.config,
+            storage_deposits: old.storage_deposits,
+            state_version: STATE_VERSION_V4,
+            class_max_supply_by_id: old.class_max_supply_by_id,
+            token_class_by_id: old.token_class_by_id,
+            class_token_by_serial: old.class_token_by_serial,
+            living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
+        };
+
+        contract.initialize_living_states_for_existing_tokens();
+        contract
     }
 
     pub fn nft_metadata(&self) -> NFTContractMetadata {
@@ -449,6 +523,12 @@ impl Contract {
 
     pub fn get_token_id_by_class_serial(&self, class_id: ClassId, serial: u32) -> Option<TokenId> {
         self.class_token_by_serial.get(&(class_id, serial))
+    }
+
+    pub fn get_living_state(&self, token_id: TokenId) -> Option<LivingStateView> {
+        self.living_state_by_id
+            .get(&token_id)
+            .map(LivingStateView::from)
     }
 
     #[payable]
@@ -945,10 +1025,11 @@ impl Contract {
             pause_flags: PauseFlags::default(),
             config: contract_config,
             storage_deposits: LookupMap::new(StorageKey::StorageDeposits),
-            state_version: STATE_VERSION_V3,
+            state_version: STATE_VERSION_V4,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
+            living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
         }
     }
 
@@ -1091,6 +1172,8 @@ impl Contract {
             self.class_token_by_serial
                 .insert(&(class.class_id, class.serial), &token_id);
         }
+        self.living_state_by_id
+            .insert(&token_id, &LivingState::default());
         self.internal_add_token_to_owner(&receiver_id, &token_id);
         events::log_nft_mint(&receiver_id, vec![token_id], memo);
         self.token_view(token)
@@ -1104,6 +1187,7 @@ impl Contract {
         self.next_approval_id_by_id.remove(token_id);
         self.royalties_by_id.remove(token_id);
         self.token_class_by_id.remove(token_id);
+        self.living_state_by_id.remove(token_id);
         self.internal_remove_token_from_owner(&token.owner_id, token_id);
         events::log_nft_burn(&token.owner_id, vec![token_id.clone()], memo);
     }
@@ -1160,6 +1244,17 @@ impl Contract {
     fn owner_set_prefix(account_id: &AccountId) -> StorageKey {
         StorageKey::TokensPerOwnerInner {
             account_hash: env::sha256(account_id.as_bytes()),
+        }
+    }
+
+    fn initialize_living_states_for_existing_tokens(&mut self) {
+        let token_ids = self.token_ids.iter().collect::<Vec<_>>();
+
+        for token_id in token_ids {
+            if self.living_state_by_id.get(&token_id).is_none() {
+                self.living_state_by_id
+                    .insert(&token_id, &LivingState::default());
+            }
         }
     }
 

@@ -108,7 +108,7 @@ fn repaired_token_metadata() -> TokenMetadata {
 fn init_success() {
     let contract = contract();
     assert_eq!(contract.owner_id, account("owner.near"));
-    assert_eq!(contract.state_version, 3);
+    assert_eq!(contract.state_version, STATE_VERSION_V4);
     assert_eq!(contract.next_token_id, 1);
     assert_eq!(contract.config.max_batch, 100);
     assert_eq!(contract.config.max_tokens_per_view, 200);
@@ -575,7 +575,7 @@ fn migrate_empty_state_succeeds_when_old_supply_zero() {
 
     context("owner.near", 0);
     let migrated = Contract::migrate_empty_state(config("owner.near"));
-    assert_eq!(migrated.state_version, 3);
+    assert_eq!(migrated.state_version, STATE_VERSION_V4);
     assert_eq!(migrated.nft_total_supply(), U128(0));
 }
 
@@ -625,7 +625,16 @@ fn create_class(contract: &mut Contract, class_id: &str, max_supply: u32) {
     contract.create_token_class(class_id.to_string(), max_supply);
 }
 
-fn contract_v2_from_v3(contract: Contract, state_version: u32) -> crate::ContractV2 {
+fn clear_living_state(contract: &mut Contract) {
+    let token_ids = contract.token_ids.iter().collect::<Vec<_>>();
+    for token_id in token_ids {
+        contract.living_state_by_id.remove(&token_id);
+    }
+}
+
+fn contract_v2_from_v4(mut contract: Contract, state_version: u32) -> crate::ContractV2 {
+    clear_living_state(&mut contract);
+
     crate::ContractV2 {
         owner_id: contract.owner_id,
         proposed_owner_id: contract.proposed_owner_id,
@@ -644,6 +653,33 @@ fn contract_v2_from_v3(contract: Contract, state_version: u32) -> crate::Contrac
         config: contract.config,
         storage_deposits: contract.storage_deposits,
         state_version,
+    }
+}
+
+fn contract_v3_from_v4(mut contract: Contract, state_version: u32) -> crate::ContractV3 {
+    clear_living_state(&mut contract);
+
+    crate::ContractV3 {
+        owner_id: contract.owner_id,
+        proposed_owner_id: contract.proposed_owner_id,
+        metadata: contract.metadata,
+        tokens_by_id: contract.tokens_by_id,
+        token_ids: contract.token_ids,
+        tokens_per_owner: contract.tokens_per_owner,
+        token_metadata_by_id: contract.token_metadata_by_id,
+        approvals_by_id: contract.approvals_by_id,
+        next_approval_id_by_id: contract.next_approval_id_by_id,
+        royalties_by_id: contract.royalties_by_id,
+        next_token_id: contract.next_token_id,
+        admins: contract.admins,
+        permissions_by_account: contract.permissions_by_account,
+        pause_flags: contract.pause_flags,
+        config: contract.config,
+        storage_deposits: contract.storage_deposits,
+        state_version,
+        class_max_supply_by_id: contract.class_max_supply_by_id,
+        token_class_by_id: contract.token_class_by_id,
+        class_token_by_serial: contract.class_token_by_serial,
     }
 }
 
@@ -1055,7 +1091,7 @@ fn batch_burn_preserves_serial_tombstones() {
 }
 
 #[test]
-fn migrate_v2_to_v3_preserves_representative_state() {
+fn migrate_v2_to_v4_preserves_representative_state() {
     let mut before = contract();
     let royalty = RoyaltyConfig {
         payout: HashMap::from([(account("artist.near"), 250)]),
@@ -1088,12 +1124,12 @@ fn migrate_v2_to_v3_preserves_representative_state() {
         approvals_paused: false,
     });
 
-    let old = contract_v2_from_v3(before, STATE_VERSION_V2);
+    let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("owner.near", 0);
-    let migrated = Contract::migrate_v2_to_v3();
+    let migrated = Contract::migrate_v2_to_v4();
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V3);
+    assert_eq!(migrated.state_version, STATE_VERSION_V4);
     assert_eq!(migrated.owner_id, account("owner.near"));
     assert_eq!(
         migrated.proposed_owner_id,
@@ -1136,22 +1172,22 @@ fn migrate_v2_to_v3_preserves_representative_state() {
 
 #[test]
 #[should_panic(expected = "Caller is not authorized to migrate")]
-fn migrate_v2_to_v3_rejects_wrong_caller() {
+fn migrate_v2_to_v4_rejects_wrong_caller() {
     let before = contract();
-    let old = contract_v2_from_v3(before, STATE_VERSION_V2);
+    let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("alice.near", 0);
-    Contract::migrate_v2_to_v3();
+    Contract::migrate_v2_to_v4();
 }
 
 #[test]
 #[should_panic(expected = "Expected V2 state")]
-fn migrate_v2_to_v3_rejects_wrong_state_version() {
+fn migrate_v2_to_v4_rejects_wrong_state_version() {
     let before = contract();
-    let old = contract_v2_from_v3(before, 99);
+    let old = contract_v2_from_v4(before, 99);
     env::state_write(&old);
     context("owner.near", 0);
-    Contract::migrate_v2_to_v3();
+    Contract::migrate_v2_to_v4();
 }
 
 #[test]
@@ -1369,12 +1405,12 @@ fn transfer_call_rollback_preserves_token_class() {
 }
 
 #[test]
-fn migrate_v2_to_v3_rejects_already_v3_state() {
+fn migrate_v3_to_v4_rejects_already_v4_state() {
     let current = contract();
     env::state_write(&current);
     context("owner.near", 0);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Contract::migrate_v2_to_v3();
+        Contract::migrate_v3_to_v4();
     }));
     assert!(result.is_err());
 }
@@ -1386,6 +1422,74 @@ fn class_id_accepts_generic_sixty_four_byte_machine_key() {
     context("owner.near", 10u128.pow(24));
     contract.create_token_class(class_id.clone(), 1);
     assert_eq!(contract.get_token_class_max_supply(class_id), Some(1));
+}
+
+#[test]
+fn living_state_is_initialized_on_mint() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Living", "alice.near");
+
+    let state = contract
+        .get_living_state(minted.token_id)
+        .expect("living state must exist");
+
+    assert_eq!(state.form_id, DEFAULT_FORM_ID);
+    assert_eq!(state.level, 1);
+    assert_eq!(state.xp, 0);
+    assert_eq!(state.specialization, None);
+    assert_eq!(state.mutation_count, 0);
+    assert_eq!(state.work_a_xp, 0);
+    assert_eq!(state.work_b_xp, 0);
+    assert_eq!(state.sponsor_spent, U128(0));
+    assert_eq!(state.burner_spent, U128(0));
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
+}
+
+#[test]
+fn living_state_survives_transfer_and_is_removed_on_burn() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Living", "alice.near");
+    let token_id = minted.token_id;
+
+    let before = contract
+        .get_living_state(token_id.clone())
+        .expect("living state must exist");
+
+    context("alice.near", 1);
+    contract.nft_transfer(account("bob.near"), token_id.clone(), None, None);
+
+    assert_eq!(contract.get_living_state(token_id.clone()), Some(before));
+
+    context("bob.near", 1);
+    contract.nft_burn(token_id.clone(), None);
+
+    assert_eq!(contract.get_living_state(token_id), None);
+}
+
+#[test]
+fn migrate_v3_to_v4_initializes_default_living_state() {
+    let mut before = contract();
+    let minted = mint(&mut before, "Legacy V3", "alice.near");
+    let token_id = minted.token_id;
+
+    let old = contract_v3_from_v4(before, STATE_VERSION_V3);
+    env::state_write(&old);
+
+    context("owner.near", 0);
+    let migrated = Contract::migrate_v3_to_v4();
+
+    assert_eq!(migrated.state_version, STATE_VERSION_V4);
+
+    let state = migrated
+        .get_living_state(token_id)
+        .expect("migrated token must receive living state");
+
+    assert_eq!(state.form_id, DEFAULT_FORM_ID);
+    assert_eq!(state.level, 1);
+    assert_eq!(state.xp, 0);
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
 }
 
 #[test]

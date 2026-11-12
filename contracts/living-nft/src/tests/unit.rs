@@ -11,12 +11,25 @@ fn account(name: &str) -> AccountId {
 }
 
 fn context(predecessor: &str, deposit: u128) {
+    context_at(predecessor, deposit, 0);
+}
+
+fn context_at(predecessor: &str, deposit: u128, block_timestamp_ns: u64) {
     let mut builder = VMContextBuilder::new();
     builder
         .current_account_id(account("nft.nuvelor.near"))
         .predecessor_account_id(account(predecessor))
-        .attached_deposit(NearToken::from_yoctonear(deposit));
+        .attached_deposit(NearToken::from_yoctonear(deposit))
+        .block_timestamp(block_timestamp_ns);
     testing_env!(builder.build());
+}
+
+fn nuve_ft_id() -> AccountId {
+    account("nuve-demo.testnet")
+}
+
+fn treasury_id() -> AccountId {
+    account("treasury.testnet")
 }
 
 fn metadata(title: &str) -> TokenMetadata {
@@ -72,7 +85,7 @@ fn contract_metadata_with_assets() -> NFTContractMetadata {
 
 fn contract() -> Contract {
     context("owner.near", 0);
-    Contract::new(config("owner.near"))
+    Contract::new(config("owner.near"), nuve_ft_id(), treasury_id())
 }
 
 fn mint(contract: &mut Contract, title: &str, owner: &str) -> TokenView {
@@ -104,11 +117,35 @@ fn repaired_token_metadata() -> TokenMetadata {
     }
 }
 
+fn living_payment_msg(token_id: TokenId, action: LivingActionKind, route: EconomicRoute) -> String {
+    near_sdk::serde_json::to_string(&LivingPaymentMessage {
+        token_id,
+        action,
+        route,
+    })
+    .unwrap()
+}
+
+fn callback_context(block_timestamp_ns: u64, promise_result: near_sdk::PromiseResult) {
+    let mut builder = VMContextBuilder::new();
+    builder
+        .current_account_id(account("nft.nuvelor.near"))
+        .predecessor_account_id(account("nft.nuvelor.near"))
+        .block_timestamp(block_timestamp_ns);
+    testing_env!(
+        builder.build(),
+        near_sdk::test_vm_config(),
+        near_sdk::RuntimeFeesConfig::test(),
+        HashMap::new(),
+        vec![promise_result],
+    );
+}
+
 #[test]
 fn init_success() {
     let contract = contract();
     assert_eq!(contract.owner_id, account("owner.near"));
-    assert_eq!(contract.state_version, STATE_VERSION_V4);
+    assert_eq!(contract.state_version, STATE_VERSION_V5);
     assert_eq!(contract.next_token_id, 1);
     assert_eq!(contract.config.max_batch, 100);
     assert_eq!(contract.config.max_tokens_per_view, 200);
@@ -121,7 +158,7 @@ fn init_invalid_metadata_fails() {
     context("owner.near", 0);
     let mut cfg = config("owner.near");
     cfg.metadata.name = String::new();
-    Contract::new(cfg);
+    Contract::new(cfg, nuve_ft_id(), treasury_id());
 }
 
 #[test]
@@ -574,8 +611,8 @@ fn migrate_empty_state_succeeds_when_old_supply_zero() {
     env::state_write(&old);
 
     context("owner.near", 0);
-    let migrated = Contract::migrate_empty_state(config("owner.near"));
-    assert_eq!(migrated.state_version, STATE_VERSION_V4);
+    let migrated = Contract::migrate_empty_state(config("owner.near"), nuve_ft_id(), treasury_id());
+    assert_eq!(migrated.state_version, STATE_VERSION_V5);
     assert_eq!(migrated.nft_total_supply(), U128(0));
 }
 
@@ -592,7 +629,7 @@ fn migrate_empty_state_rejects_current_account_predecessor() {
     env::state_write(&old);
 
     context("nft.nuvelor.near", 0);
-    Contract::migrate_empty_state(config("owner.near"));
+    Contract::migrate_empty_state(config("owner.near"), nuve_ft_id(), treasury_id());
 }
 
 #[test]
@@ -610,7 +647,7 @@ fn migrate_empty_state_fails_when_old_supply_nonzero() {
     env::state_write(&old);
 
     context("owner.near", 0);
-    Contract::migrate_empty_state(config("owner.near"));
+    Contract::migrate_empty_state(config("owner.near"), nuve_ft_id(), treasury_id());
 }
 
 fn token_class(class_id: &str, serial: u32) -> TokenClass {
@@ -680,6 +717,32 @@ fn contract_v3_from_v4(mut contract: Contract, state_version: u32) -> crate::Con
         class_max_supply_by_id: contract.class_max_supply_by_id,
         token_class_by_id: contract.token_class_by_id,
         class_token_by_serial: contract.class_token_by_serial,
+    }
+}
+
+fn contract_v4_from_v5(contract: Contract, state_version: u32) -> crate::ContractV4 {
+    crate::ContractV4 {
+        owner_id: contract.owner_id,
+        proposed_owner_id: contract.proposed_owner_id,
+        metadata: contract.metadata,
+        tokens_by_id: contract.tokens_by_id,
+        token_ids: contract.token_ids,
+        tokens_per_owner: contract.tokens_per_owner,
+        token_metadata_by_id: contract.token_metadata_by_id,
+        approvals_by_id: contract.approvals_by_id,
+        next_approval_id_by_id: contract.next_approval_id_by_id,
+        royalties_by_id: contract.royalties_by_id,
+        next_token_id: contract.next_token_id,
+        admins: contract.admins,
+        permissions_by_account: contract.permissions_by_account,
+        pause_flags: contract.pause_flags,
+        config: contract.config,
+        storage_deposits: contract.storage_deposits,
+        state_version,
+        class_max_supply_by_id: contract.class_max_supply_by_id,
+        token_class_by_id: contract.token_class_by_id,
+        class_token_by_serial: contract.class_token_by_serial,
+        living_state_by_id: contract.living_state_by_id,
     }
 }
 
@@ -1091,7 +1154,7 @@ fn batch_burn_preserves_serial_tombstones() {
 }
 
 #[test]
-fn migrate_v2_to_v4_preserves_representative_state() {
+fn migrate_v2_to_v5_preserves_representative_state() {
     let mut before = contract();
     let royalty = RoyaltyConfig {
         payout: HashMap::from([(account("artist.near"), 250)]),
@@ -1127,9 +1190,9 @@ fn migrate_v2_to_v4_preserves_representative_state() {
     let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("owner.near", 0);
-    let migrated = Contract::migrate_v2_to_v4();
+    let migrated = Contract::migrate_v2_to_v5(nuve_ft_id(), treasury_id());
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V4);
+    assert_eq!(migrated.state_version, STATE_VERSION_V5);
     assert_eq!(migrated.owner_id, account("owner.near"));
     assert_eq!(
         migrated.proposed_owner_id,
@@ -1172,22 +1235,22 @@ fn migrate_v2_to_v4_preserves_representative_state() {
 
 #[test]
 #[should_panic(expected = "Caller is not authorized to migrate")]
-fn migrate_v2_to_v4_rejects_wrong_caller() {
+fn migrate_v2_to_v5_rejects_wrong_caller() {
     let before = contract();
     let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("alice.near", 0);
-    Contract::migrate_v2_to_v4();
+    Contract::migrate_v2_to_v5(nuve_ft_id(), treasury_id());
 }
 
 #[test]
 #[should_panic(expected = "Expected V2 state")]
-fn migrate_v2_to_v4_rejects_wrong_state_version() {
+fn migrate_v2_to_v5_rejects_wrong_state_version() {
     let before = contract();
     let old = contract_v2_from_v4(before, 99);
     env::state_write(&old);
     context("owner.near", 0);
-    Contract::migrate_v2_to_v4();
+    Contract::migrate_v2_to_v5(nuve_ft_id(), treasury_id());
 }
 
 #[test]
@@ -1405,12 +1468,12 @@ fn transfer_call_rollback_preserves_token_class() {
 }
 
 #[test]
-fn migrate_v3_to_v4_rejects_already_v4_state() {
+fn migrate_v3_to_v5_rejects_already_v5_state() {
     let current = contract();
     env::state_write(&current);
     context("owner.near", 0);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Contract::migrate_v3_to_v4();
+        Contract::migrate_v3_to_v5(nuve_ft_id(), treasury_id());
     }));
     assert!(result.is_err());
 }
@@ -1468,7 +1531,7 @@ fn living_state_survives_transfer_and_is_removed_on_burn() {
 }
 
 #[test]
-fn migrate_v3_to_v4_initializes_default_living_state() {
+fn migrate_v3_to_v5_initializes_default_living_state() {
     let mut before = contract();
     let minted = mint(&mut before, "Legacy V3", "alice.near");
     let token_id = minted.token_id;
@@ -1477,9 +1540,9 @@ fn migrate_v3_to_v4_initializes_default_living_state() {
     env::state_write(&old);
 
     context("owner.near", 0);
-    let migrated = Contract::migrate_v3_to_v4();
+    let migrated = Contract::migrate_v3_to_v5(nuve_ft_id(), treasury_id());
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V4);
+    assert_eq!(migrated.state_version, STATE_VERSION_V5);
 
     let state = migrated
         .get_living_state(token_id)
@@ -1490,6 +1553,228 @@ fn migrate_v3_to_v4_initializes_default_living_state() {
     assert_eq!(state.xp, 0);
     assert_eq!(state.active_action, None);
     assert_eq!(state.ready_at_ns, 0);
+}
+
+#[test]
+fn living_game_config_exposes_demo_economy() {
+    let contract = contract();
+    let config = contract.get_living_game_config();
+
+    assert_eq!(config.nuve_ft_id, nuve_ft_id());
+    assert_eq!(config.treasury_id, treasury_id());
+    assert_eq!(config.nuve_decimals, 4);
+    assert_eq!(config.feed_cost, U128(5 * NUVE_UNIT));
+    assert_eq!(config.work_cost, U128(10 * NUVE_UNIT));
+    assert_eq!(config.feed_duration_ns, 30_000_000_000);
+    assert_eq!(config.work_duration_ns, 10_000_000_000);
+}
+
+#[test]
+fn sponsor_feed_payment_starts_timer_only_after_route_success() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Feed", "alice.near");
+    let token_id = minted.token_id;
+
+    context("nuve-demo.testnet", 0);
+    let result =
+        near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(FEED_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::Feed,
+                EconomicRoute::Sponsor,
+            ),
+        );
+    assert!(matches!(result, near_sdk::PromiseOrValue::Promise(_)));
+
+    let pending = contract
+        .get_pending_living_payment(token_id.clone())
+        .expect("pending payment must exist");
+    assert_eq!(pending.settlement_id, 1);
+    assert_eq!(pending.payer_id, account("alice.near"));
+    assert_eq!(pending.amount, U128(FEED_COST_ATOMIC));
+
+    let before = contract.get_living_state(token_id.clone()).unwrap();
+    assert_eq!(before.active_action, None);
+    assert_eq!(before.sponsor_spent, U128(0));
+
+    let callback_ts = 1_000_000_000_000;
+    callback_context(callback_ts, near_sdk::PromiseResult::Successful(Vec::new()));
+    let unused = contract.on_living_payment_routed(
+        token_id.clone(),
+        pending.settlement_id,
+        U128(FEED_COST_ATOMIC),
+    );
+
+    assert_eq!(unused, U128(0));
+    assert!(contract
+        .get_pending_living_payment(token_id.clone())
+        .is_none());
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.active_action, Some(LivingActionKind::Feed));
+    assert_eq!(state.ready_at_ns, callback_ts + FEED_DURATION_NS);
+    assert_eq!(state.sponsor_spent, U128(FEED_COST_ATOMIC));
+    assert_eq!(state.burner_spent, U128(0));
+}
+
+#[test]
+fn failed_burn_route_refunds_full_amount_and_does_not_start_work() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Work", "alice.near");
+    let token_id = minted.token_id;
+
+    context("nuve-demo.testnet", 0);
+    let result =
+        near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(WORK_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::WorkA,
+                EconomicRoute::Burn,
+            ),
+        );
+    assert!(matches!(result, near_sdk::PromiseOrValue::Promise(_)));
+
+    let pending = contract
+        .get_pending_living_payment(token_id.clone())
+        .expect("pending payment must exist");
+
+    callback_context(2_000_000_000_000, near_sdk::PromiseResult::Failed);
+    let unused = contract.on_living_payment_routed(
+        token_id.clone(),
+        pending.settlement_id,
+        U128(WORK_COST_ATOMIC),
+    );
+
+    assert_eq!(unused, U128(WORK_COST_ATOMIC));
+    assert!(contract
+        .get_pending_living_payment(token_id.clone())
+        .is_none());
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
+    assert_eq!(state.sponsor_spent, U128(0));
+    assert_eq!(state.burner_spent, U128(0));
+}
+
+#[test]
+fn living_payment_rejects_wrong_ft_wrong_owner_and_wrong_amount() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Guarded", "alice.near");
+    let token_id = minted.token_id;
+
+    context("fake-ft.testnet", 0);
+    let wrong_ft = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(FEED_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::Feed,
+                EconomicRoute::Sponsor,
+            ),
+        );
+    }));
+    assert!(wrong_ft.is_err());
+
+    context("nuve-demo.testnet", 0);
+    let wrong_owner = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("bob.near"),
+            U128(FEED_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::Feed,
+                EconomicRoute::Sponsor,
+            ),
+        );
+    }));
+    assert!(wrong_owner.is_err());
+
+    context("nuve-demo.testnet", 0);
+    let wrong_amount = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(FEED_COST_ATOMIC - 1),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::Feed,
+                EconomicRoute::Sponsor,
+            ),
+        );
+    }));
+    assert!(wrong_amount.is_err());
+
+    assert!(contract.get_pending_living_payment(token_id).is_none());
+}
+
+#[test]
+fn pending_living_payment_blocks_duplicate_payment_and_nft_burn() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Pending", "alice.near");
+    let token_id = minted.token_id;
+
+    context("nuve-demo.testnet", 0);
+    let _ =
+        near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(WORK_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::WorkB,
+                EconomicRoute::Sponsor,
+            ),
+        );
+
+    let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            &mut contract,
+            account("alice.near"),
+            U128(WORK_COST_ATOMIC),
+            living_payment_msg(
+                token_id.clone(),
+                LivingActionKind::WorkB,
+                EconomicRoute::Sponsor,
+            ),
+        );
+    }));
+    assert!(duplicate.is_err());
+
+    context("alice.near", 1);
+    let burn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.nft_burn(token_id.clone(), None);
+    }));
+    assert!(burn.is_err());
+    assert!(contract.nft_token(token_id).is_some());
+}
+
+#[test]
+fn migrate_v4_to_v5_preserves_living_state_and_sets_game_accounts() {
+    let mut before = contract();
+    let minted = mint(&mut before, "Legacy V4", "alice.near");
+    let token_id = minted.token_id.clone();
+
+    let old = contract_v4_from_v5(before, STATE_VERSION_V4);
+    env::state_write(&old);
+
+    context("owner.near", 0);
+    let migrated = Contract::migrate_v4_to_v5(nuve_ft_id(), treasury_id());
+
+    assert_eq!(migrated.state_version, STATE_VERSION_V5);
+    assert_eq!(migrated.nuve_ft_id, nuve_ft_id());
+    assert_eq!(migrated.treasury_id, treasury_id());
+    assert!(migrated.get_living_state(token_id).is_some());
+    assert_eq!(migrated.next_living_settlement_id, 1);
 }
 
 #[test]

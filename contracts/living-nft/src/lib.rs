@@ -1,8 +1,10 @@
 pub mod events;
+pub mod gameplay;
 pub mod living;
 pub mod types;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_contract_standards::non_fungible_token::metadata::NFTContractMetadata;
 use near_contract_standards::storage_management::{StorageBalance, StorageBalanceBounds};
 use near_sdk::collections::{LazyOption, LookupMap, UnorderedSet};
@@ -13,17 +15,21 @@ use near_sdk::{
 };
 use std::collections::{HashMap, HashSet};
 
+pub use crate::gameplay::*;
 pub use crate::living::*;
 pub use crate::types::*;
 
 const STATE_VERSION_V2: u32 = 2;
 const STATE_VERSION_V3: u32 = 3;
 const STATE_VERSION_V4: u32 = 4;
+const STATE_VERSION_V5: u32 = 5;
 const MAX_CLASS_ID_BYTES: usize = 64;
 const BPS_DENOMINATOR: u32 = 10_000;
 const GAS_FOR_NFT_ON_TRANSFER: Gas = Gas::from_tgas(30);
 const GAS_FOR_NFT_RESOLVE_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_FOR_NFT_ON_APPROVE: Gas = Gas::from_tgas(10);
+const GAS_FOR_NUVE_ROUTE: Gas = Gas::from_tgas(20);
+const GAS_FOR_LIVING_PAYMENT_CALLBACK: Gas = Gas::from_tgas(20);
 const MIN_STORAGE_BYTES: u128 = 1_000;
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -44,6 +50,7 @@ pub enum StorageKey {
     TokenClassById,
     ClassTokenBySerial,
     LivingStateById,
+    PendingLivingPaymentByToken,
 }
 
 #[ext_contract(ext_nft_receiver)]
@@ -80,6 +87,20 @@ trait NftResolver {
         token_id: TokenId,
         approved_account_ids: Option<HashMap<AccountId, ApprovalId>>,
     ) -> bool;
+
+    fn on_living_payment_routed(
+        &mut self,
+        token_id: TokenId,
+        settlement_id: u64,
+        amount: U128,
+    ) -> U128;
+}
+
+#[ext_contract(ext_nuve_ft)]
+#[allow(dead_code)]
+trait NuveFt {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+    fn burn(&mut self, amount: U128) -> U128;
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -135,10 +156,35 @@ struct ContractV3 {
     class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
 }
 
+#[derive(BorshDeserialize, BorshSerialize)]
+struct ContractV4 {
+    owner_id: AccountId,
+    proposed_owner_id: Option<AccountId>,
+    metadata: LazyOption<NFTContractMetadata>,
+    tokens_by_id: LookupMap<TokenId, Token>,
+    token_ids: UnorderedSet<TokenId>,
+    tokens_per_owner: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    token_metadata_by_id: LookupMap<TokenId, TokenMetadata>,
+    approvals_by_id: LookupMap<TokenId, HashMap<AccountId, ApprovalId>>,
+    next_approval_id_by_id: LookupMap<TokenId, ApprovalId>,
+    royalties_by_id: LookupMap<TokenId, RoyaltyConfig>,
+    next_token_id: u64,
+    admins: UnorderedSet<AccountId>,
+    permissions_by_account: LookupMap<AccountId, PermissionSet>,
+    pause_flags: PauseFlags,
+    config: ContractConfig,
+    storage_deposits: LookupMap<AccountId, u128>,
+    state_version: u32,
+    class_max_supply_by_id: LookupMap<ClassId, u32>,
+    token_class_by_id: LookupMap<TokenId, TokenClass>,
+    class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
+    living_state_by_id: LookupMap<TokenId, LivingState>,
+}
+
 #[near(
     contract_state,
     contract_metadata(
-        version = "4.0.0",
+        version = "5.0.0",
         link = "https://nuvelor.gg",
         standard(standard = "nep330", version = "1.1.0"),
         standard(standard = "nep171", version = "1.0.0"),
@@ -173,18 +219,26 @@ pub struct Contract {
     pub token_class_by_id: LookupMap<TokenId, TokenClass>,
     pub class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
     pub living_state_by_id: LookupMap<TokenId, LivingState>,
+    pub nuve_ft_id: AccountId,
+    pub treasury_id: AccountId,
+    pub pending_living_payment_by_token: LookupMap<TokenId, PendingLivingPayment>,
+    pub next_living_settlement_id: u64,
 }
 
 #[near_bindgen]
 impl Contract {
     #[init]
-    pub fn new(config: ContractConfigInput) -> Self {
+    pub fn new(config: ContractConfigInput, nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         assert!(!env::state_exists(), "Contract is already initialized");
-        Self::new_clean(config)
+        Self::new_clean(config, nuve_ft_id, treasury_id)
     }
 
     #[init(ignore_state)]
-    pub fn migrate_empty_state(config: ContractConfigInput) -> Self {
+    pub fn migrate_empty_state(
+        config: ContractConfigInput,
+        nuve_ft_id: AccountId,
+        treasury_id: AccountId,
+    ) -> Self {
         let data = env::storage_read(b"STATE").expect("State is not initialized");
         let mut slice = data.as_slice();
         let old = OldContractPrefix::deserialize(&mut slice)
@@ -195,11 +249,11 @@ impl Contract {
             "Caller is not authorized to migrate"
         );
         assert_eq!(old.token_ids.len(), 0, "Old total supply must be zero");
-        Self::new_clean(config)
+        Self::new_clean(config, nuve_ft_id, treasury_id)
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v2_to_v4() -> Self {
+    pub fn migrate_v2_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV2 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V2 contract state"));
 
@@ -227,11 +281,17 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V4,
+            state_version: STATE_VERSION_V5,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
             living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
+            nuve_ft_id,
+            treasury_id,
+            pending_living_payment_by_token: LookupMap::new(
+                StorageKey::PendingLivingPaymentByToken,
+            ),
+            next_living_settlement_id: 1,
         };
 
         contract.initialize_living_states_for_existing_tokens();
@@ -239,7 +299,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v3_to_v4() -> Self {
+    pub fn migrate_v3_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV3 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V3 contract state"));
 
@@ -267,15 +327,64 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V4,
+            state_version: STATE_VERSION_V5,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
             living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
+            nuve_ft_id,
+            treasury_id,
+            pending_living_payment_by_token: LookupMap::new(
+                StorageKey::PendingLivingPaymentByToken,
+            ),
+            next_living_settlement_id: 1,
         };
 
         contract.initialize_living_states_for_existing_tokens();
         contract
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate_v4_to_v5(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+        let old: ContractV4 = env::state_read()
+            .unwrap_or_else(|| env::panic_str("Cannot deserialize V4 contract state"));
+
+        assert_eq!(old.state_version, STATE_VERSION_V4, "Expected V4 state");
+        assert_eq!(
+            env::predecessor_account_id(),
+            old.owner_id,
+            "Caller is not authorized to migrate"
+        );
+
+        Self {
+            owner_id: old.owner_id,
+            proposed_owner_id: old.proposed_owner_id,
+            metadata: old.metadata,
+            tokens_by_id: old.tokens_by_id,
+            token_ids: old.token_ids,
+            tokens_per_owner: old.tokens_per_owner,
+            token_metadata_by_id: old.token_metadata_by_id,
+            approvals_by_id: old.approvals_by_id,
+            next_approval_id_by_id: old.next_approval_id_by_id,
+            royalties_by_id: old.royalties_by_id,
+            next_token_id: old.next_token_id,
+            admins: old.admins,
+            permissions_by_account: old.permissions_by_account,
+            pause_flags: old.pause_flags,
+            config: old.config,
+            storage_deposits: old.storage_deposits,
+            state_version: STATE_VERSION_V5,
+            class_max_supply_by_id: old.class_max_supply_by_id,
+            token_class_by_id: old.token_class_by_id,
+            class_token_by_serial: old.class_token_by_serial,
+            living_state_by_id: old.living_state_by_id,
+            nuve_ft_id,
+            treasury_id,
+            pending_living_payment_by_token: LookupMap::new(
+                StorageKey::PendingLivingPaymentByToken,
+            ),
+            next_living_settlement_id: 1,
+        }
     }
 
     pub fn nft_metadata(&self) -> NFTContractMetadata {
@@ -531,6 +640,141 @@ impl Contract {
             .map(LivingStateView::from)
     }
 
+    pub fn get_living_game_config(&self) -> LivingGameConfigView {
+        LivingGameConfigView {
+            nuve_ft_id: self.nuve_ft_id.clone(),
+            treasury_id: self.treasury_id.clone(),
+            nuve_decimals: NUVE_DECIMALS,
+            feed_cost: U128(FEED_COST_ATOMIC),
+            work_cost: U128(WORK_COST_ATOMIC),
+            feed_duration_ns: FEED_DURATION_NS,
+            work_duration_ns: WORK_DURATION_NS,
+        }
+    }
+
+    pub fn get_pending_living_payment(
+        &self,
+        token_id: TokenId,
+    ) -> Option<PendingLivingPaymentView> {
+        self.pending_living_payment_by_token
+            .get(&token_id)
+            .map(PendingLivingPaymentView::from)
+    }
+
+    #[private]
+    pub fn on_living_payment_routed(
+        &mut self,
+        token_id: TokenId,
+        settlement_id: u64,
+        amount: U128,
+    ) -> U128 {
+        let Some(pending) = self.pending_living_payment_by_token.get(&token_id) else {
+            events::log_event(
+                "living_payment_callback_stale",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "settlement_id": settlement_id,
+                    "amount": amount,
+                }),
+            );
+            return U128(0);
+        };
+
+        if pending.settlement_id != settlement_id || pending.amount != amount.0 {
+            events::log_event(
+                "living_payment_callback_mismatch",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "settlement_id": settlement_id,
+                    "expected_settlement_id": pending.settlement_id,
+                    "amount": amount,
+                    "expected_amount": U128(pending.amount),
+                }),
+            );
+            return U128(0);
+        }
+
+        let route_succeeded = env::promise_result_checked(0, 4_096).is_ok();
+
+        if !route_succeeded {
+            self.pending_living_payment_by_token.remove(&token_id);
+            events::log_event(
+                "living_payment_refund",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "settlement_id": settlement_id,
+                    "payer_id": pending.payer_id,
+                    "action": pending.action,
+                    "route": pending.route,
+                    "amount": amount,
+                }),
+            );
+            return amount;
+        }
+
+        let Some(mut state) = self.living_state_by_id.get(&token_id) else {
+            self.pending_living_payment_by_token.remove(&token_id);
+            events::log_event(
+                "living_payment_orphaned",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "settlement_id": settlement_id,
+                    "payer_id": pending.payer_id,
+                    "action": pending.action,
+                    "route": pending.route,
+                    "amount": amount,
+                }),
+            );
+            return U128(0);
+        };
+
+        if state.active_action.is_some() {
+            self.pending_living_payment_by_token.remove(&token_id);
+            events::log_event(
+                "living_payment_state_conflict",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "settlement_id": settlement_id,
+                    "action": pending.action,
+                    "route": pending.route,
+                    "amount": amount,
+                }),
+            );
+            return U128(0);
+        }
+
+        match pending.route {
+            EconomicRoute::Sponsor => {
+                state.sponsor_spent = state.sponsor_spent.saturating_add(pending.amount);
+            }
+            EconomicRoute::Burn => {
+                state.burner_spent = state.burner_spent.saturating_add(pending.amount);
+            }
+        }
+
+        state.active_action = Some(pending.action);
+        state.ready_at_ns =
+            env::block_timestamp().saturating_add(action_duration_ns(pending.action));
+
+        self.living_state_by_id.insert(&token_id, &state);
+        self.pending_living_payment_by_token.remove(&token_id);
+
+        events::log_event(
+            "living_action_started",
+            serde_json::json!({
+                "token_id": token_id,
+                "settlement_id": settlement_id,
+                "payer_id": pending.payer_id,
+                "action": pending.action,
+                "route": pending.route,
+                "amount": amount,
+                "ready_at_ns": state.ready_at_ns,
+            }),
+        );
+
+        U128(0)
+    }
+
     #[payable]
     pub fn nft_mint(
         &mut self,
@@ -596,6 +840,7 @@ impl Contract {
         assert!(!self.pause_flags.burn_paused, "Burn is paused");
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         self.assert_can_burn(&token);
+        self.assert_no_pending_living_payment(&token_id);
         self.internal_burn(&token_id, memo);
     }
 
@@ -621,6 +866,7 @@ impl Contract {
             if !privileged {
                 assert_eq!(token.owner_id, caller, "Caller is not token owner");
             }
+            self.assert_no_pending_living_payment(token_id);
         }
         for token_id in token_ids {
             self.internal_burn(&token_id, memo.clone());
@@ -998,8 +1244,113 @@ impl Contract {
     }
 }
 
+#[near_bindgen]
+impl FungibleTokenReceiver for Contract {
+    fn ft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128> {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.nuve_ft_id,
+            "Only configured NUVE FT is accepted"
+        );
+
+        let request: LivingPaymentMessage = near_sdk::serde_json::from_str(&msg)
+            .unwrap_or_else(|_| env::panic_str("Invalid Living payment message"));
+
+        let token = self
+            .tokens_by_id
+            .get(&request.token_id)
+            .expect("Token not found");
+        assert_eq!(
+            token.owner_id, sender_id,
+            "Only current NFT owner may pay for an action"
+        );
+
+        let state = self
+            .living_state_by_id
+            .get(&request.token_id)
+            .expect("Living state not found");
+        assert!(
+            state.active_action.is_none(),
+            "Living action is already active"
+        );
+        assert!(
+            self.pending_living_payment_by_token
+                .get(&request.token_id)
+                .is_none(),
+            "Living payment settlement is already pending"
+        );
+
+        let expected_amount = action_cost_atomic(request.action);
+        assert_eq!(
+            amount.0, expected_amount,
+            "Incorrect NUVE amount for Living action"
+        );
+
+        let settlement_id = self.next_living_settlement_id;
+        self.next_living_settlement_id = self
+            .next_living_settlement_id
+            .checked_add(1)
+            .expect("Living settlement ID overflow");
+
+        let pending = PendingLivingPayment {
+            settlement_id,
+            token_id: request.token_id.clone(),
+            payer_id: sender_id,
+            action: request.action,
+            route: request.route,
+            amount: amount.0,
+        };
+        self.pending_living_payment_by_token
+            .insert(&request.token_id, &pending);
+
+        events::log_event(
+            "living_payment_pending",
+            serde_json::json!({
+                "token_id": request.token_id,
+                "settlement_id": settlement_id,
+                "payer_id": pending.payer_id,
+                "action": request.action,
+                "route": request.route,
+                "amount": amount,
+            }),
+        );
+
+        let route_promise = match request.route {
+            EconomicRoute::Sponsor => ext_nuve_ft::ext(self.nuve_ft_id.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(GAS_FOR_NUVE_ROUTE)
+                .ft_transfer(
+                    self.treasury_id.clone(),
+                    amount,
+                    Some(format!("NUVI Living action settlement #{}", settlement_id)),
+                ),
+            EconomicRoute::Burn => ext_nuve_ft::ext(self.nuve_ft_id.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(GAS_FOR_NUVE_ROUTE)
+                .burn(amount),
+        };
+
+        PromiseOrValue::Promise(
+            route_promise.then(
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_LIVING_PAYMENT_CALLBACK)
+                    .on_living_payment_routed(request.token_id, settlement_id, amount),
+            ),
+        )
+    }
+}
+
 impl Contract {
-    fn new_clean(config: ContractConfigInput) -> Self {
+    fn new_clean(
+        config: ContractConfigInput,
+        nuve_ft_id: AccountId,
+        treasury_id: AccountId,
+    ) -> Self {
         Self::validate_contract_metadata(&config.metadata);
         let owner_id = config.owner_id.clone();
         let metadata = config.metadata.clone();
@@ -1025,11 +1376,17 @@ impl Contract {
             pause_flags: PauseFlags::default(),
             config: contract_config,
             storage_deposits: LookupMap::new(StorageKey::StorageDeposits),
-            state_version: STATE_VERSION_V4,
+            state_version: STATE_VERSION_V5,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
             living_state_by_id: LookupMap::new(StorageKey::LivingStateById),
+            nuve_ft_id,
+            treasury_id,
+            pending_living_payment_by_token: LookupMap::new(
+                StorageKey::PendingLivingPaymentByToken,
+            ),
+            next_living_settlement_id: 1,
         }
     }
 
@@ -1133,6 +1490,13 @@ impl Contract {
         assert!(
             self.tokens_by_id.get(token_id).is_none(),
             "Token already exists"
+        );
+    }
+
+    fn assert_no_pending_living_payment(&self, token_id: &TokenId) {
+        assert!(
+            self.pending_living_payment_by_token.get(token_id).is_none(),
+            "Living payment settlement is pending"
         );
     }
 

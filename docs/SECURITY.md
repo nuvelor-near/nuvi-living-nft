@@ -22,3 +22,16 @@ Planned invariants:
 - mutation preserves token_id;
 - transfer preserves LivingState/history;
 - previous owner loses authority immediately.
+
+## Living Settlement V1
+
+Implemented:
+
+- only configured demo NUVE FT may enter the payment receiver;
+- exact action cost is enforced on-chain;
+- only current NFT owner may initiate payment;
+- one pending settlement per NFT;
+- LivingState changes only after successful Sponsor/Burn routing;
+- failed route returns the full amount for NEP-141 refund resolution;
+- burn is blocked while a settlement is pending;
+- callback settlement IDs prevent stale settlement finalization.

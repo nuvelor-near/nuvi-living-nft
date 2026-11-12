@@ -2,7 +2,7 @@
 name = "nuvelor-nft"
 version = "0.1.0"
 edition = "2021"
-repository = "https://github.com/urw13/NUVELOR"
+repository = "https://github.com/nuvelor-near/nuvi-living-nft"
 publish = false
 
 [lib]

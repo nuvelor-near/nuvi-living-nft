@@ -6,9 +6,9 @@ Planned components:
 
 - NEP-171 ownership
 - LivingState
-- Feed / Work
-- XP
-- economic behavior
+- Feed / Work payment settlement and timers — implemented
+- XP / action completion — next
+- economic behavior counters — Sponsor/Burn spend implemented
 - mutation
 - dynamic metadata/media
 - history/events

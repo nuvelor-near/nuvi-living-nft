@@ -25,11 +25,18 @@ Stretch only after the Testnet core passes acceptance:
 
 ## Current status
 
-This commit establishes the public Hackathon repository boundary and documentation baseline.
+Hackathon implementation is active on top of the disclosed pre-Hackathon baseline.
 
-**No Hackathon gameplay implementation is claimed complete at this baseline.**
+Implemented and source-tested:
+
+- LivingState V4 foundation for persistent player-shaped NFT identity;
+- isolated NUVE demo FT with one-time starter claim and bounded idempotent game rewards;
+- Living Settlement V1 / contract state V5:
+  `ft_transfer_call → Sponsor/Burn route → callback → Feed/Work timer`.
 
 The private NUVELOR production repository remains separate. This repository must never contain production secrets, private infrastructure configuration, AI_MEMORY data, deploy credentials, or private keys.
+
+See `docs/LIVING_STATE_V1.md`, `docs/NUVE_FT_V1.md` and `docs/LIVING_SETTLEMENT_V1.md`.
 
 ## Planned repository structure
 

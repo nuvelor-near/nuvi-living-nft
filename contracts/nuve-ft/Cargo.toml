@@ -1,0 +1,17 @@
+[package]
+name = "nuvi-demo-nuve-ft"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/nuvelor-near/nuvi-living-nft"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+borsh = { version = "=1.6.1", features = ["derive"] }
+near-sdk = { version = "=5.26.1", features = ["legacy"] }
+near-contract-standards = "=5.26.1"
+
+[dev-dependencies]
+near-sdk = { version = "=5.26.1", features = ["legacy", "unit-testing"] }

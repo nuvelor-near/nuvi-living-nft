@@ -31,20 +31,22 @@ Implemented and source-tested:
 
 - LivingState V4 foundation for persistent player-shaped NFT identity;
 - isolated NUVE demo FT with one-time starter claim and bounded idempotent game rewards;
-- Living Settlement V1 / contract state V5:
+- Living Settlement V1:
   `ft_transfer_call → Sponsor/Burn route → callback → Feed/Work timer`;
 - Living Actions V1:
   ready Work A/B actions award XP and affinity; ready Feed actions mint a retry-safe 1 NUVE reward before the timer is cleared;
 - Mutation V1:
   at 5 XP the current owner gets an on-chain Form A/Form B probability preview and may perform the single MVP mutation without changing `token_id`;
-- Global Alignment Base / contract state V6:
-  successful Treasury/Burn routes accumulate global NUVE totals and canonical basis-point shares.
+- Global Alignment Base:
+  successful Treasury/Burn routes accumulate global NUVE totals and canonical basis-point shares;
+- Starter NUVI / contract state V7:
+  each NEAR account may self-claim one free Common/Basic NUVI; transferring or burning it never resets the claim.
 
 The bounded Global Alignment bonus that will influence mutation is intentionally still pending; the repository does not claim the Memecoins With Mechanics track yet.
 
 The private NUVELOR production repository remains separate. This repository must never contain production secrets, private infrastructure configuration, AI_MEMORY data, deploy credentials, or private keys.
 
-See the implementation notes under `docs/`, including `GLOBAL_ALIGNMENT_V1.md`.
+See the implementation notes under `docs/`, including `STARTER_NUVI_V1.md`.
 
 ## Planned repository structure
 

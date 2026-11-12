@@ -23,6 +23,17 @@ Planned invariants:
 - transfer preserves LivingState/history;
 - previous owner loses authority immediately.
 
+## Starter NUVI V1
+
+Implemented:
+
+- `claim_starter_nuvi()` is self-service and accepts no payment;
+- the contract subsidizes storage for the Hackathon starter mint;
+- one persistent claim flag exists per NEAR account;
+- transferring or burning the NFT does not remove the claim flag;
+- mint pause also pauses starter claims;
+- starter metadata is contract-defined rather than caller-supplied.
+
 ## Living Settlement V1
 
 Implemented:

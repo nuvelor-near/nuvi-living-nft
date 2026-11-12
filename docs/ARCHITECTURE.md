@@ -5,6 +5,7 @@ Planned components:
 ## Living NFT contract
 
 - NEP-171 ownership
+- one free self-service starter NUVI per account — implemented
 - LivingState
 - Feed / Work payment settlement and timers — implemented
 - XP / action completion — implemented
@@ -12,8 +13,8 @@ Planned components:
 - personal economic behavior counters — Sponsor/Burn spend implemented
 - mutation preview + first Form A/Form B mutation — implemented
 - Global NUVE Treasury/Burn totals + bps view — implemented
-- bounded community alignment influence — next
-- dynamic metadata/media
+- bounded community alignment influence — pending exact agreed cap
+- dynamic metadata/media — next
 - history/events
 
 ## NUVE Demo FT

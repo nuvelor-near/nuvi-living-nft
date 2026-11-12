@@ -24,6 +24,7 @@ const STATE_VERSION_V3: u32 = 3;
 const STATE_VERSION_V4: u32 = 4;
 const STATE_VERSION_V5: u32 = 5;
 const STATE_VERSION_V6: u32 = 6;
+const STATE_VERSION_V7: u32 = 7;
 const MAX_CLASS_ID_BYTES: usize = 64;
 const BPS_DENOMINATOR: u32 = 10_000;
 const GAS_FOR_NFT_ON_TRANSFER: Gas = Gas::from_tgas(30);
@@ -54,6 +55,7 @@ pub enum StorageKey {
     ClassTokenBySerial,
     LivingStateById,
     PendingLivingPaymentByToken,
+    StarterClaimedByAccount,
 }
 
 #[ext_contract(ext_nft_receiver)]
@@ -222,10 +224,41 @@ struct ContractV5 {
     next_living_settlement_id: u64,
 }
 
+#[derive(BorshDeserialize, BorshSerialize)]
+struct ContractV6 {
+    owner_id: AccountId,
+    proposed_owner_id: Option<AccountId>,
+    metadata: LazyOption<NFTContractMetadata>,
+    tokens_by_id: LookupMap<TokenId, Token>,
+    token_ids: UnorderedSet<TokenId>,
+    tokens_per_owner: LookupMap<AccountId, UnorderedSet<TokenId>>,
+    token_metadata_by_id: LookupMap<TokenId, TokenMetadata>,
+    approvals_by_id: LookupMap<TokenId, HashMap<AccountId, ApprovalId>>,
+    next_approval_id_by_id: LookupMap<TokenId, ApprovalId>,
+    royalties_by_id: LookupMap<TokenId, RoyaltyConfig>,
+    next_token_id: u64,
+    admins: UnorderedSet<AccountId>,
+    permissions_by_account: LookupMap<AccountId, PermissionSet>,
+    pause_flags: PauseFlags,
+    config: ContractConfig,
+    storage_deposits: LookupMap<AccountId, u128>,
+    state_version: u32,
+    class_max_supply_by_id: LookupMap<ClassId, u32>,
+    token_class_by_id: LookupMap<TokenId, TokenClass>,
+    class_token_by_serial: LookupMap<(ClassId, u32), TokenId>,
+    living_state_by_id: LookupMap<TokenId, LivingState>,
+    nuve_ft_id: AccountId,
+    treasury_id: AccountId,
+    pending_living_payment_by_token: LookupMap<TokenId, PendingLivingPayment>,
+    next_living_settlement_id: u64,
+    global_treasury_total: u128,
+    global_burn_total: u128,
+}
+
 #[near(
     contract_state,
     contract_metadata(
-        version = "6.0.0",
+        version = "7.0.0",
         link = "https://nuvelor.gg",
         standard(standard = "nep330", version = "1.1.0"),
         standard(standard = "nep171", version = "1.0.0"),
@@ -266,6 +299,7 @@ pub struct Contract {
     pub next_living_settlement_id: u64,
     pub global_treasury_total: u128,
     pub global_burn_total: u128,
+    pub starter_claimed_by_account: LookupMap<AccountId, bool>,
 }
 
 #[near_bindgen]
@@ -296,7 +330,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v2_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v2_to_v7(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV2 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V2 contract state"));
 
@@ -324,7 +358,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V6,
+            state_version: STATE_VERSION_V7,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
@@ -337,6 +371,7 @@ impl Contract {
             next_living_settlement_id: 1,
             global_treasury_total: 0,
             global_burn_total: 0,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         };
 
         contract.initialize_living_states_for_existing_tokens();
@@ -344,7 +379,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v3_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v3_to_v7(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV3 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V3 contract state"));
 
@@ -372,7 +407,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V6,
+            state_version: STATE_VERSION_V7,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
@@ -385,6 +420,7 @@ impl Contract {
             next_living_settlement_id: 1,
             global_treasury_total: 0,
             global_burn_total: 0,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         };
 
         contract.initialize_living_states_for_existing_tokens();
@@ -392,7 +428,7 @@ impl Contract {
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v4_to_v6(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
+    pub fn migrate_v4_to_v7(nuve_ft_id: AccountId, treasury_id: AccountId) -> Self {
         let old: ContractV4 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V4 contract state"));
 
@@ -420,7 +456,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V6,
+            state_version: STATE_VERSION_V7,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
@@ -433,11 +469,12 @@ impl Contract {
             next_living_settlement_id: 1,
             global_treasury_total: 0,
             global_burn_total: 0,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         }
     }
 
     #[init(ignore_state)]
-    pub fn migrate_v5_to_v6() -> Self {
+    pub fn migrate_v5_to_v7() -> Self {
         let old: ContractV5 = env::state_read()
             .unwrap_or_else(|| env::panic_str("Cannot deserialize V5 contract state"));
 
@@ -465,7 +502,7 @@ impl Contract {
             pause_flags: old.pause_flags,
             config: old.config,
             storage_deposits: old.storage_deposits,
-            state_version: STATE_VERSION_V6,
+            state_version: STATE_VERSION_V7,
             class_max_supply_by_id: old.class_max_supply_by_id,
             token_class_by_id: old.token_class_by_id,
             class_token_by_serial: old.class_token_by_serial,
@@ -476,6 +513,51 @@ impl Contract {
             next_living_settlement_id: old.next_living_settlement_id,
             global_treasury_total: 0,
             global_burn_total: 0,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
+        }
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate_v6_to_v7() -> Self {
+        let old: ContractV6 = env::state_read()
+            .unwrap_or_else(|| env::panic_str("Cannot deserialize V6 contract state"));
+
+        assert_eq!(old.state_version, STATE_VERSION_V6, "Expected V6 state");
+        assert_eq!(
+            env::predecessor_account_id(),
+            old.owner_id,
+            "Caller is not authorized to migrate"
+        );
+
+        Self {
+            owner_id: old.owner_id,
+            proposed_owner_id: old.proposed_owner_id,
+            metadata: old.metadata,
+            tokens_by_id: old.tokens_by_id,
+            token_ids: old.token_ids,
+            tokens_per_owner: old.tokens_per_owner,
+            token_metadata_by_id: old.token_metadata_by_id,
+            approvals_by_id: old.approvals_by_id,
+            next_approval_id_by_id: old.next_approval_id_by_id,
+            royalties_by_id: old.royalties_by_id,
+            next_token_id: old.next_token_id,
+            admins: old.admins,
+            permissions_by_account: old.permissions_by_account,
+            pause_flags: old.pause_flags,
+            config: old.config,
+            storage_deposits: old.storage_deposits,
+            state_version: STATE_VERSION_V7,
+            class_max_supply_by_id: old.class_max_supply_by_id,
+            token_class_by_id: old.token_class_by_id,
+            class_token_by_serial: old.class_token_by_serial,
+            living_state_by_id: old.living_state_by_id,
+            nuve_ft_id: old.nuve_ft_id,
+            treasury_id: old.treasury_id,
+            pending_living_payment_by_token: old.pending_living_payment_by_token,
+            next_living_settlement_id: old.next_living_settlement_id,
+            global_treasury_total: old.global_treasury_total,
+            global_burn_total: old.global_burn_total,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         }
     }
 
@@ -1149,6 +1231,74 @@ impl Contract {
         U128(0)
     }
 
+    pub fn starter_claim_used(&self, account_id: AccountId) -> bool {
+        self.starter_claimed_by_account
+            .get(&account_id)
+            .unwrap_or(false)
+    }
+
+    pub fn claim_starter_nuvi(&mut self) -> TokenView {
+        assert!(!self.pause_flags.mint_paused, "Mint is paused");
+
+        let caller = env::predecessor_account_id();
+        assert!(
+            !self
+                .starter_claimed_by_account
+                .get(&caller)
+                .unwrap_or(false),
+            "Starter NUVI claim already used"
+        );
+
+        let token_id = self.generate_next_token_id();
+        let metadata = TokenMetadata {
+            title: Some("NUVI Starter".to_string()),
+            description: Some(
+                "Nuvi is a mysterious creature powered by NUVELOR energy. It farms NUVE and evolves with the player."
+                    .to_string(),
+            ),
+            media: None,
+            media_hash: None,
+            copies: Some(1),
+            issued_at: Some(env::block_timestamp()),
+            expires_at: None,
+            starts_at: None,
+            updated_at: None,
+            extra: Some(
+                serde_json::json!({
+                    "type": "Mascot",
+                    "character": "Nuvi",
+                    "base_rarity": "Common",
+                    "form_id": BASIC_FORM_ID,
+                })
+                .to_string(),
+            ),
+            reference: None,
+            reference_hash: None,
+        };
+
+        self.starter_claimed_by_account.insert(&caller, &true);
+        let view = self.internal_mint(
+            caller.clone(),
+            token_id.clone(),
+            metadata,
+            None,
+            Some("NUVI Hackathon starter claim".to_string()),
+            None,
+        );
+
+        events::log_event(
+            "starter_nuvi_claimed",
+            serde_json::json!({
+                "account_id": caller,
+                "token_id": token_id,
+                "base_rarity": "Common",
+                "form_id": BASIC_FORM_ID,
+            }),
+        );
+
+        view
+    }
+
     #[payable]
     pub fn nft_mint(
         &mut self,
@@ -1753,7 +1903,7 @@ impl Contract {
             pause_flags: PauseFlags::default(),
             config: contract_config,
             storage_deposits: LookupMap::new(StorageKey::StorageDeposits),
-            state_version: STATE_VERSION_V6,
+            state_version: STATE_VERSION_V7,
             class_max_supply_by_id: LookupMap::new(StorageKey::ClassMaxSupplyById),
             token_class_by_id: LookupMap::new(StorageKey::TokenClassById),
             class_token_by_serial: LookupMap::new(StorageKey::ClassTokenBySerial),
@@ -1766,6 +1916,7 @@ impl Contract {
             next_living_settlement_id: 1,
             global_treasury_total: 0,
             global_burn_total: 0,
+            starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         }
     }
 

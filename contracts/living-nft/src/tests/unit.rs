@@ -145,7 +145,7 @@ fn callback_context(block_timestamp_ns: u64, promise_result: near_sdk::PromiseRe
 fn init_success() {
     let contract = contract();
     assert_eq!(contract.owner_id, account("owner.near"));
-    assert_eq!(contract.state_version, STATE_VERSION_V6);
+    assert_eq!(contract.state_version, STATE_VERSION_V7);
     assert_eq!(contract.next_token_id, 1);
     assert_eq!(contract.config.max_batch, 100);
     assert_eq!(contract.config.max_tokens_per_view, 200);
@@ -160,6 +160,7 @@ fn init_success() {
             burn_share_bps: 0,
         }
     );
+    assert!(!contract.starter_claim_used(account("alice.near")));
 }
 
 #[test]
@@ -622,7 +623,7 @@ fn migrate_empty_state_succeeds_when_old_supply_zero() {
 
     context("owner.near", 0);
     let migrated = Contract::migrate_empty_state(config("owner.near"), nuve_ft_id(), treasury_id());
-    assert_eq!(migrated.state_version, STATE_VERSION_V6);
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
     assert_eq!(migrated.nft_total_supply(), U128(0));
 }
 
@@ -730,7 +731,7 @@ fn contract_v3_from_v4(mut contract: Contract, state_version: u32) -> crate::Con
     }
 }
 
-fn contract_v4_from_v6(contract: Contract, state_version: u32) -> crate::ContractV4 {
+fn contract_v4_from_v7(contract: Contract, state_version: u32) -> crate::ContractV4 {
     crate::ContractV4 {
         owner_id: contract.owner_id,
         proposed_owner_id: contract.proposed_owner_id,
@@ -756,7 +757,7 @@ fn contract_v4_from_v6(contract: Contract, state_version: u32) -> crate::Contrac
     }
 }
 
-fn contract_v5_from_v6(contract: Contract, state_version: u32) -> crate::ContractV5 {
+fn contract_v5_from_v7(contract: Contract, state_version: u32) -> crate::ContractV5 {
     crate::ContractV5 {
         owner_id: contract.owner_id,
         proposed_owner_id: contract.proposed_owner_id,
@@ -783,6 +784,38 @@ fn contract_v5_from_v6(contract: Contract, state_version: u32) -> crate::Contrac
         treasury_id: contract.treasury_id,
         pending_living_payment_by_token: contract.pending_living_payment_by_token,
         next_living_settlement_id: contract.next_living_settlement_id,
+    }
+}
+
+fn contract_v6_from_v7(contract: Contract, state_version: u32) -> crate::ContractV6 {
+    crate::ContractV6 {
+        owner_id: contract.owner_id,
+        proposed_owner_id: contract.proposed_owner_id,
+        metadata: contract.metadata,
+        tokens_by_id: contract.tokens_by_id,
+        token_ids: contract.token_ids,
+        tokens_per_owner: contract.tokens_per_owner,
+        token_metadata_by_id: contract.token_metadata_by_id,
+        approvals_by_id: contract.approvals_by_id,
+        next_approval_id_by_id: contract.next_approval_id_by_id,
+        royalties_by_id: contract.royalties_by_id,
+        next_token_id: contract.next_token_id,
+        admins: contract.admins,
+        permissions_by_account: contract.permissions_by_account,
+        pause_flags: contract.pause_flags,
+        config: contract.config,
+        storage_deposits: contract.storage_deposits,
+        state_version,
+        class_max_supply_by_id: contract.class_max_supply_by_id,
+        token_class_by_id: contract.token_class_by_id,
+        class_token_by_serial: contract.class_token_by_serial,
+        living_state_by_id: contract.living_state_by_id,
+        nuve_ft_id: contract.nuve_ft_id,
+        treasury_id: contract.treasury_id,
+        pending_living_payment_by_token: contract.pending_living_payment_by_token,
+        next_living_settlement_id: contract.next_living_settlement_id,
+        global_treasury_total: contract.global_treasury_total,
+        global_burn_total: contract.global_burn_total,
     }
 }
 
@@ -1194,7 +1227,7 @@ fn batch_burn_preserves_serial_tombstones() {
 }
 
 #[test]
-fn migrate_v2_to_v6_preserves_representative_state() {
+fn migrate_v2_to_v7_preserves_representative_state() {
     let mut before = contract();
     let royalty = RoyaltyConfig {
         payout: HashMap::from([(account("artist.near"), 250)]),
@@ -1230,9 +1263,9 @@ fn migrate_v2_to_v6_preserves_representative_state() {
     let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("owner.near", 0);
-    let migrated = Contract::migrate_v2_to_v6(nuve_ft_id(), treasury_id());
+    let migrated = Contract::migrate_v2_to_v7(nuve_ft_id(), treasury_id());
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V6);
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
     assert_eq!(migrated.owner_id, account("owner.near"));
     assert_eq!(
         migrated.proposed_owner_id,
@@ -1275,22 +1308,22 @@ fn migrate_v2_to_v6_preserves_representative_state() {
 
 #[test]
 #[should_panic(expected = "Caller is not authorized to migrate")]
-fn migrate_v2_to_v6_rejects_wrong_caller() {
+fn migrate_v2_to_v7_rejects_wrong_caller() {
     let before = contract();
     let old = contract_v2_from_v4(before, STATE_VERSION_V2);
     env::state_write(&old);
     context("alice.near", 0);
-    Contract::migrate_v2_to_v6(nuve_ft_id(), treasury_id());
+    Contract::migrate_v2_to_v7(nuve_ft_id(), treasury_id());
 }
 
 #[test]
 #[should_panic(expected = "Expected V2 state")]
-fn migrate_v2_to_v6_rejects_wrong_state_version() {
+fn migrate_v2_to_v7_rejects_wrong_state_version() {
     let before = contract();
     let old = contract_v2_from_v4(before, 99);
     env::state_write(&old);
     context("owner.near", 0);
-    Contract::migrate_v2_to_v6(nuve_ft_id(), treasury_id());
+    Contract::migrate_v2_to_v7(nuve_ft_id(), treasury_id());
 }
 
 #[test]
@@ -1508,12 +1541,12 @@ fn transfer_call_rollback_preserves_token_class() {
 }
 
 #[test]
-fn migrate_v3_to_v6_rejects_already_v6_state() {
+fn migrate_v3_to_v7_rejects_already_v6_state() {
     let current = contract();
     env::state_write(&current);
     context("owner.near", 0);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Contract::migrate_v3_to_v6(nuve_ft_id(), treasury_id());
+        Contract::migrate_v3_to_v7(nuve_ft_id(), treasury_id());
     }));
     assert!(result.is_err());
 }
@@ -1571,7 +1604,7 @@ fn living_state_survives_transfer_and_is_removed_on_burn() {
 }
 
 #[test]
-fn migrate_v3_to_v6_initializes_default_living_state() {
+fn migrate_v3_to_v7_initializes_default_living_state() {
     let mut before = contract();
     let minted = mint(&mut before, "Legacy V3", "alice.near");
     let token_id = minted.token_id;
@@ -1580,9 +1613,9 @@ fn migrate_v3_to_v6_initializes_default_living_state() {
     env::state_write(&old);
 
     context("owner.near", 0);
-    let migrated = Contract::migrate_v3_to_v6(nuve_ft_id(), treasury_id());
+    let migrated = Contract::migrate_v3_to_v7(nuve_ft_id(), treasury_id());
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V6);
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
 
     let state = migrated
         .get_living_state(token_id)
@@ -2172,6 +2205,121 @@ fn mutation_requires_threshold_owner_and_unlocked_state() {
 }
 
 #[test]
+fn starter_nuvi_claim_is_free_once_per_account_with_basic_common_state() {
+    let mut contract = contract();
+
+    context_at("alice.near", 0, 50_000_000_000_000);
+    let starter = contract.claim_starter_nuvi();
+
+    assert_eq!(starter.owner_id, account("alice.near"));
+    assert_eq!(starter.metadata.title.as_deref(), Some("NUVI Starter"));
+    assert_eq!(starter.metadata.copies, Some(1));
+    assert!(starter
+        .metadata
+        .description
+        .as_deref()
+        .unwrap()
+        .contains("evolves with the player"));
+    let extra = starter.metadata.extra.as_deref().unwrap();
+    assert!(extra.contains("\"base_rarity\":\"Common\""));
+    assert!(extra.contains("\"form_id\":\"basic\""));
+    assert!(contract.starter_claim_used(account("alice.near")));
+
+    let state = contract
+        .get_living_state(starter.token_id.clone())
+        .expect("starter LivingState must exist");
+    assert_eq!(state.form_id, BASIC_FORM_ID);
+    assert_eq!(state.level, 1);
+    assert_eq!(state.xp, 0);
+    assert_eq!(state.mutation_count, 0);
+}
+
+#[test]
+fn starter_claim_never_resets_after_transfer_or_burn() {
+    let mut contract = contract();
+
+    context("alice.near", 0);
+    let starter = contract.claim_starter_nuvi();
+    let token_id = starter.token_id;
+
+    context("alice.near", 1);
+    contract.nft_transfer(account("bob.near"), token_id.clone(), None, None);
+
+    context("bob.near", 1);
+    contract.nft_burn(token_id, Some("starter burn test".to_string()));
+
+    context("alice.near", 0);
+    let second = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.claim_starter_nuvi();
+    }));
+    assert!(second.is_err());
+    assert!(contract.starter_claim_used(account("alice.near")));
+}
+
+#[test]
+fn different_accounts_can_each_claim_one_starter_nuvi() {
+    let mut contract = contract();
+
+    context("alice.near", 0);
+    let alice = contract.claim_starter_nuvi();
+
+    context("bob.near", 0);
+    let bob = contract.claim_starter_nuvi();
+
+    assert_ne!(alice.token_id, bob.token_id);
+    assert!(contract.starter_claim_used(account("alice.near")));
+    assert!(contract.starter_claim_used(account("bob.near")));
+    assert_eq!(contract.nft_total_supply(), U128(2));
+}
+
+#[test]
+fn starter_claim_respects_mint_pause() {
+    let mut contract = contract();
+
+    context("owner.near", 1);
+    contract.set_pause_flags(PauseFlags {
+        mint_paused: true,
+        ..PauseFlags::default()
+    });
+
+    context("alice.near", 0);
+    let paused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.claim_starter_nuvi();
+    }));
+    assert!(paused.is_err());
+    assert!(!contract.starter_claim_used(account("alice.near")));
+}
+
+#[test]
+fn migrate_v6_to_v7_preserves_global_alignment_and_initializes_starter_claims() {
+    let mut before = contract();
+    before.global_treasury_total = 30 * NUVE_UNIT;
+    before.global_burn_total = 10 * NUVE_UNIT;
+    let minted = mint(&mut before, "Legacy V6", "alice.near");
+    let token_id = minted.token_id;
+
+    let old = contract_v6_from_v7(before, STATE_VERSION_V6);
+    env::state_write(&old);
+
+    context("owner.near", 0);
+    let migrated = Contract::migrate_v6_to_v7();
+
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
+    assert_eq!(
+        migrated.get_global_alignment(),
+        GlobalAlignmentView {
+            treasury_total: U128(30 * NUVE_UNIT),
+            burn_total: U128(10 * NUVE_UNIT),
+            global_total: U128(40 * NUVE_UNIT),
+            treasury_share_bps: 7_500,
+            burn_share_bps: 2_500,
+        }
+    );
+    assert!(migrated.get_living_state(token_id).is_some());
+    assert!(!migrated.starter_claim_used(account("alice.near")));
+}
+
+#[test]
 fn global_alignment_counts_only_successful_treasury_and_burn_routes() {
     let mut contract = contract();
     let sponsor = mint(&mut contract, "Global sponsor", "alice.near");
@@ -2235,7 +2383,7 @@ fn global_alignment_counts_only_successful_treasury_and_burn_routes() {
 }
 
 #[test]
-fn migrate_v5_to_v6_preserves_game_state_and_initializes_global_alignment() {
+fn migrate_v5_to_v7_preserves_game_state_and_initializes_global_alignment() {
     let mut before = contract();
     let minted = mint(&mut before, "Legacy V5", "alice.near");
     let token_id = minted.token_id.clone();
@@ -2249,13 +2397,13 @@ fn migrate_v5_to_v6_preserves_game_state_and_initializes_global_alignment() {
         41_000_000_000_000,
     );
 
-    let old = contract_v5_from_v6(before, STATE_VERSION_V5);
+    let old = contract_v5_from_v7(before, STATE_VERSION_V5);
     env::state_write(&old);
 
     context("owner.near", 0);
-    let migrated = Contract::migrate_v5_to_v6();
+    let migrated = Contract::migrate_v5_to_v7();
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V6);
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
     assert_eq!(migrated.nuve_ft_id, nuve_ft_id());
     assert_eq!(migrated.treasury_id, treasury_id());
     assert_eq!(
@@ -2268,18 +2416,18 @@ fn migrate_v5_to_v6_preserves_game_state_and_initializes_global_alignment() {
 }
 
 #[test]
-fn migrate_v4_to_v6_preserves_living_state_and_sets_game_accounts() {
+fn migrate_v4_to_v7_preserves_living_state_and_sets_game_accounts() {
     let mut before = contract();
     let minted = mint(&mut before, "Legacy V4", "alice.near");
     let token_id = minted.token_id.clone();
 
-    let old = contract_v4_from_v6(before, STATE_VERSION_V4);
+    let old = contract_v4_from_v7(before, STATE_VERSION_V4);
     env::state_write(&old);
 
     context("owner.near", 0);
-    let migrated = Contract::migrate_v4_to_v6(nuve_ft_id(), treasury_id());
+    let migrated = Contract::migrate_v4_to_v7(nuve_ft_id(), treasury_id());
 
-    assert_eq!(migrated.state_version, STATE_VERSION_V6);
+    assert_eq!(migrated.state_version, STATE_VERSION_V7);
     assert_eq!(migrated.nuve_ft_id, nuve_ft_id());
     assert_eq!(migrated.treasury_id, treasury_id());
     assert!(migrated.get_living_state(token_id).is_some());

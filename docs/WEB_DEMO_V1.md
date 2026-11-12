@@ -1,6 +1,6 @@
 # NUVI Hackathon Web Demo v1
 
-Status: source implementation accepted; isolated Testnet deployment pending.
+Status: **source + Testnet integration accepted; public Pages activation pending**.
 
 ## Wallet path
 
@@ -24,9 +24,18 @@ Hackathon isolation changes:
 - no production contract IDs;
 - no production credentials.
 
-The copied HOT executor is byte-identical to the current NUVELOR source used for this implementation:
+The copied HOT executor is byte-identical to the NUVELOR source used for this implementation:
 
 `25c62609d3cd2cee39f03eea20b3f6344353601030be0fb832472d534e34a2d4`
+
+## Live contract defaults
+
+- Living NFT: `nuvi-hack26.nvlborc70517034832.testnet`
+- NUVE FT: `nuve-hack26.nvlborc70517034832.testnet`
+- Treasury: `treasury-hack26.nvlborc70517034832.testnet`
+- RPC: `https://rpc.testnet.fastnear.com`
+
+The web app therefore reads the live Hackathon deployment without a local environment file.
 
 ## Demo flow implemented in UI
 
@@ -43,13 +52,17 @@ The copied HOT executor is byte-identical to the current NUVELOR source used for
 11. Display Global Alignment totals and shares.
 12. Surface transaction hashes as Testnet explorer evidence.
 
+The page also includes a **Live chain proof** panel that requires no wallet. It reads the already-verified E2E player/token state directly from Testnet and links to the player, contract and mutation transaction.
+
 ## Testnet configuration
 
-The client uses public environment values only:
+Public override values:
 
 - `VITE_NFT_CONTRACT_ID`
 - `VITE_NUVE_CONTRACT_ID`
 - `VITE_TREASURY_ID`
+- `VITE_DEMO_PLAYER_ID`
+- `VITE_DEMO_MUTATION_TX`
 - optional RPC/explorer overrides
 
 No private key or deploy credential belongs in the web environment.
@@ -58,15 +71,21 @@ No private key or deploy credential belongs in the web environment.
 
 - client unit tests: `4/4 PASS`
 - Vite production build: PASS
-- local preview HTTP smoke: PASS
-- copied HOT executor HTTP/static SHA check: PASS
-- NEAR Testnet RPC status: PASS
-- connector manifest retrieval: PASS, HOT wallet present
-- production account/backend string boundary audit: PASS
-- secret-pattern audit: PASS
+- GitHub Pages subpath build: PASS
+- copied HOT executor SHA check: PASS
+- live Testnet contract E2E: PASS
+- production account/backend boundary audit: PASS
 
-Current built JavaScript is approximately 217 KB before gzip and approximately 66 KB gzip.
+GitHub Actions run `43285807520`:
+
+- build job: PASS;
+- static Pages artifact: PASS;
+- deploy job: blocked only because the repository Pages site is not yet enabled with Source = GitHub Actions.
 
 ## Next gate
 
-Bind isolated Hackathon Testnet accounts, deploy both contracts, configure collection base URI, register NFT/Treasury FT storage, and execute the real wallet E2E flow.
+1. add `basic.png`, `form_a.png`, `form_b.png`;
+2. enable GitHub Pages for the repository using GitHub Actions;
+3. rerun Pages deployment;
+4. set collection `base_uri` with `scripts/testnet/set-media-base.mjs`;
+5. run browser/wallet acceptance and capture submission evidence.

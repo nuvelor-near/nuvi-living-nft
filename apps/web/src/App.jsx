@@ -19,6 +19,7 @@ import {
   startLivingAction,
 } from "./near/gameApi";
 import { extractTransactionHashes } from "./near/transactions";
+import VerifiedProof from "./VerifiedProof";
 
 const ACTIONS = [
   { id: "feed", label: "Feed", detail: "30 sec · reward 1 NUVE" },
@@ -649,6 +650,8 @@ export default function App() {
             </section>
           </>
         )}
+
+        <VerifiedProof />
       </main>
 
       <footer>

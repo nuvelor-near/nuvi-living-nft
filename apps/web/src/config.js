@@ -20,6 +20,14 @@ export const appConfig = Object.freeze({
     "VITE_TREASURY_ID",
     "treasury-hack26.nvlborc70517034832.testnet",
   ),
+  demoPlayerId: value(
+    "VITE_DEMO_PLAYER_ID",
+    "player-hack26.nvlborc70517034832.testnet",
+  ),
+  demoMutationTx: value(
+    "VITE_DEMO_MUTATION_TX",
+    "GdZRFghKgMzBoRV3W19TsDbkSafzKa59fUNTi39W1bYF",
+  ),
   explorerAccountBase: value(
     "VITE_EXPLORER_ACCOUNT_BASE",
     "https://testnet.nearblocks.io/address",

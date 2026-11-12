@@ -702,3 +702,57 @@ footer {
     flex-direction: column;
   }
 }
+
+
+.verified-proof {
+  border-color: rgba(102, 127, 255, 0.42);
+  background:
+    linear-gradient(135deg, rgba(35, 43, 82, 0.35), rgba(15, 18, 27, 0.92)),
+    rgba(15, 18, 27, 0.92);
+}
+
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.proof-grid > div {
+  border: 1px solid #2c3449;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(9, 13, 21, 0.62);
+}
+
+.proof-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: #7e899d;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.proof-grid strong {
+  font-size: 13px;
+}
+
+.proof-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 4px 0 12px;
+  font-size: 12px;
+  color: #b9c2ff;
+}
+
+.proof-links a:hover {
+  color: #fff;
+}
+
+@media (max-width: 820px) {
+  .proof-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

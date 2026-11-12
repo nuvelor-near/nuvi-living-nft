@@ -2001,6 +2001,137 @@ fn active_living_action_locks_transfer_and_burn() {
 }
 
 #[test]
+fn behavior_levels_match_agreed_nuve_thresholds() {
+    assert_eq!(behavior_level(0), 0);
+    assert_eq!(behavior_level(5 * NUVE_UNIT - 1), 0);
+    assert_eq!(behavior_level(5 * NUVE_UNIT), 1);
+    assert_eq!(behavior_level(20 * NUVE_UNIT - 1), 1);
+    assert_eq!(behavior_level(20 * NUVE_UNIT), 2);
+    assert_eq!(behavior_level(40 * NUVE_UNIT - 1), 2);
+    assert_eq!(behavior_level(40 * NUVE_UNIT), 3);
+    assert_eq!(behavior_level(1_000 * NUVE_UNIT), 3);
+}
+
+#[test]
+fn mutation_preview_uses_work_and_behavior_weights_on_chain() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Preview", "alice.near");
+    let token_id = minted.token_id;
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.xp = MUTATION_THRESHOLD_XP;
+    state.work_a_xp = 3;
+    state.work_b_xp = 1;
+    state.sponsor_spent = 20 * NUVE_UNIT;
+    state.burner_spent = 40 * NUVE_UNIT;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    let preview = contract.get_mutation_preview(token_id).unwrap();
+    assert!(preview.eligible);
+    assert_eq!(preview.current_form_id, BASIC_FORM_ID);
+    assert_eq!(preview.mutation_stage, 0);
+    assert_eq!(preview.threshold_xp, 5);
+    assert_eq!(preview.sponsor_level, 2);
+    assert_eq!(preview.burner_level, 3);
+    assert_eq!(preview.form_a_weight, 80);
+    assert_eq!(preview.form_b_weight, 45);
+    assert_eq!(preview.form_a_probability_bps, 6_400);
+    assert_eq!(preview.form_b_probability_bps, 3_600);
+}
+
+#[test]
+fn first_mutation_preserves_token_identity_and_xp_and_is_single_use() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Mutant", "alice.near");
+    let token_id = minted.token_id;
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.xp = MUTATION_THRESHOLD_XP;
+    state.work_a_xp = 4;
+    state.work_b_xp = 1;
+    state.sponsor_spent = 20 * NUVE_UNIT;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    context_at("alice.near", 0, 20_000_000_000_000);
+    let mutated = contract.mutate(token_id.clone());
+
+    assert!(mutated.form_id == FORM_A_ID || mutated.form_id == FORM_B_ID);
+    assert_eq!(mutated.mutation_count, 1);
+    assert_eq!(mutated.xp, MUTATION_THRESHOLD_XP);
+    assert_eq!(mutated.level, 1);
+    assert_eq!(mutated.specialization, None);
+    assert_eq!(
+        contract.nft_token(token_id.clone()).unwrap().owner_id,
+        account("alice.near")
+    );
+
+    context_at("alice.near", 0, 20_000_000_000_001);
+    let second = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.mutate(token_id.clone());
+    }));
+    assert!(second.is_err());
+
+    let form_before_transfer = contract.get_living_state(token_id.clone()).unwrap().form_id;
+
+    context("alice.near", 1);
+    contract.nft_transfer(account("bob.near"), token_id.clone(), None, None);
+
+    assert_eq!(
+        contract.nft_token(token_id.clone()).unwrap().owner_id,
+        account("bob.near")
+    );
+    assert_eq!(
+        contract.get_living_state(token_id).unwrap().form_id,
+        form_before_transfer
+    );
+}
+
+#[test]
+fn mutation_requires_threshold_owner_and_unlocked_state() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Mutation guards", "alice.near");
+    let token_id = minted.token_id;
+
+    context("alice.near", 0);
+    let below_threshold = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.mutate(token_id.clone());
+    }));
+    assert!(below_threshold.is_err());
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.xp = MUTATION_THRESHOLD_XP;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    context("bob.near", 0);
+    let non_owner = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.mutate(token_id.clone());
+    }));
+    assert!(non_owner.is_err());
+
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::WorkA,
+        EconomicRoute::Sponsor,
+        30_000_000_000_000,
+    );
+
+    let preview = contract.get_mutation_preview(token_id.clone()).unwrap();
+    assert!(!preview.eligible);
+
+    context_at("alice.near", 0, 30_000_000_000_001);
+    let active_action = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.mutate(token_id.clone());
+    }));
+    assert!(active_action.is_err());
+    assert_eq!(
+        contract.get_living_state(token_id).unwrap().mutation_count,
+        0
+    );
+}
+
+#[test]
 fn migrate_v4_to_v5_preserves_living_state_and_sets_game_accounts() {
     let mut before = contract();
     let minted = mint(&mut before, "Legacy V4", "alice.near");

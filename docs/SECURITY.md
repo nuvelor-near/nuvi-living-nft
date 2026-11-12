@@ -47,3 +47,14 @@ Implemented:
 - Feed reward IDs are deterministic from `token_id + ready_at_ns`, so a retry cannot mint twice;
 - failed Feed reward calls leave the ready action retryable;
 - transfer and burn are blocked while a Living action is active, preventing owner changes during asynchronous reward settlement.
+
+## Mutation V1
+
+Implemented:
+
+- only the current NFT owner may mutate;
+- mutation requires 5 XP, Basic form, no active action and no pending settlement;
+- probability preview is calculated on-chain;
+- one MVP mutation only;
+- `token_id` is preserved;
+- mutation randomness is explicitly gameplay-grade and is not used for financial settlement.

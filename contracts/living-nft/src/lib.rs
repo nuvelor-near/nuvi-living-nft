@@ -660,6 +660,7 @@ impl Contract {
             work_cost: U128(WORK_COST_ATOMIC),
             feed_duration_ns: FEED_DURATION_NS,
             work_duration_ns: WORK_DURATION_NS,
+            mutation_threshold_xp: MUTATION_THRESHOLD_XP,
         }
     }
 
@@ -670,6 +671,109 @@ impl Contract {
         self.pending_living_payment_by_token
             .get(&token_id)
             .map(PendingLivingPaymentView::from)
+    }
+
+    pub fn get_mutation_preview(&self, token_id: TokenId) -> Option<MutationPreviewView> {
+        let state = self.living_state_by_id.get(&token_id)?;
+        let (form_a_weight, form_b_weight, sponsor_level, burner_level) = mutation_weights(&state);
+        let (form_a_probability_bps, form_b_probability_bps) =
+            mutation_probability_bps(form_a_weight, form_b_weight);
+
+        Some(MutationPreviewView {
+            token_id: token_id.clone(),
+            eligible: state.form_id == BASIC_FORM_ID
+                && state.mutation_count == 0
+                && state.xp >= MUTATION_THRESHOLD_XP
+                && state.active_action.is_none()
+                && self
+                    .pending_living_payment_by_token
+                    .get(&token_id)
+                    .is_none(),
+            current_form_id: state.form_id,
+            mutation_stage: state.mutation_count,
+            xp: state.xp,
+            threshold_xp: MUTATION_THRESHOLD_XP,
+            work_a_xp: state.work_a_xp,
+            work_b_xp: state.work_b_xp,
+            sponsor_level,
+            burner_level,
+            form_a_weight,
+            form_b_weight,
+            form_a_probability_bps,
+            form_b_probability_bps,
+        })
+    }
+
+    pub fn mutate(&mut self, token_id: TokenId) -> LivingStateView {
+        let token = self.tokens_by_id.get(&token_id).expect("Token not found");
+        let caller = env::predecessor_account_id();
+        assert_eq!(token.owner_id, caller, "Only current NFT owner may mutate");
+        self.assert_living_token_unlocked(&token_id);
+
+        let mut state = self
+            .living_state_by_id
+            .get(&token_id)
+            .expect("Living state not found");
+        assert_eq!(state.form_id, BASIC_FORM_ID, "Only Basic form may mutate");
+        assert_eq!(state.mutation_count, 0, "MVP mutation already used");
+        assert!(
+            state.xp >= MUTATION_THRESHOLD_XP,
+            "Mutation XP threshold is not reached"
+        );
+
+        let (form_a_weight, form_b_weight, sponsor_level, burner_level) = mutation_weights(&state);
+        let total_weight = form_a_weight
+            .checked_add(form_b_weight)
+            .expect("Mutation weight overflow");
+
+        let mut entropy = Vec::with_capacity(96);
+        entropy.extend_from_slice(&env::random_seed_array());
+        entropy.extend_from_slice(token_id.as_bytes());
+        entropy.extend_from_slice(&state.mutation_count.to_le_bytes());
+        entropy.extend_from_slice(&env::block_height().to_le_bytes());
+        entropy.extend_from_slice(&env::block_timestamp().to_le_bytes());
+        let digest = env::sha256(&entropy);
+        let roll_source = u64::from_le_bytes(
+            digest[..8]
+                .try_into()
+                .expect("SHA-256 prefix must contain eight bytes"),
+        );
+        let roll = roll_source % total_weight;
+
+        let selected_form_id = if roll < form_a_weight {
+            FORM_A_ID
+        } else {
+            FORM_B_ID
+        };
+
+        state.form_id = selected_form_id.to_string();
+        state.mutation_count = state
+            .mutation_count
+            .checked_add(1)
+            .expect("Mutation count overflow");
+        self.living_state_by_id.insert(&token_id, &state);
+
+        let mutation_id = format!("{}:{}", token_id, state.mutation_count);
+        events::log_event(
+            "nuvi_mutated",
+            serde_json::json!({
+                "token_id": token_id,
+                "owner_id": caller,
+                "mutation_id": mutation_id,
+                "mutation_stage": state.mutation_count,
+                "form_id": state.form_id,
+                "xp": state.xp,
+                "work_a_xp": state.work_a_xp,
+                "work_b_xp": state.work_b_xp,
+                "sponsor_level": sponsor_level,
+                "burner_level": burner_level,
+                "form_a_weight": form_a_weight,
+                "form_b_weight": form_b_weight,
+                "roll": roll,
+            }),
+        );
+
+        LivingStateView::from(state)
     }
 
     pub fn complete_living_action(&mut self, token_id: TokenId) -> PromiseOrValue<bool> {

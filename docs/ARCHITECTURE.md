@@ -10,8 +10,8 @@ Planned components:
 - XP / action completion — implemented
 - retry-safe Feed NUVE reward — implemented
 - economic behavior counters — Sponsor/Burn spend implemented
-- mutation — next
-- dynamic metadata/media
+- mutation preview + first Form A/Form B mutation — implemented
+- dynamic metadata/media — next
 - history/events
 
 ## NUVE Demo FT

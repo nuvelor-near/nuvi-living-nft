@@ -1,4 +1,4 @@
-use crate::{LivingActionKind, TokenId};
+use crate::{LivingActionKind, LivingState, TokenId};
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
@@ -12,6 +12,15 @@ pub const WORK_COST_ATOMIC: u128 = 10 * NUVE_UNIT;
 
 pub const FEED_DURATION_NS: u64 = 30_000_000_000;
 pub const WORK_DURATION_NS: u64 = 10_000_000_000;
+
+pub const MUTATION_THRESHOLD_XP: u64 = 5;
+pub const BASIC_FORM_ID: &str = "basic";
+pub const FORM_A_ID: &str = "form_a";
+pub const FORM_B_ID: &str = "form_b";
+
+const MUTATION_BASE_WEIGHT: u64 = 10;
+const MUTATION_WORK_XP_WEIGHT: u64 = 20;
+const MUTATION_BEHAVIOR_LEVEL_WEIGHT: u64 = 5;
 
 #[repr(u8)]
 #[derive(
@@ -76,6 +85,26 @@ pub struct LivingGameConfigView {
     pub work_cost: U128,
     pub feed_duration_ns: u64,
     pub work_duration_ns: u64,
+    pub mutation_threshold_xp: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(crate = "near_sdk::serde")]
+pub struct MutationPreviewView {
+    pub token_id: TokenId,
+    pub eligible: bool,
+    pub current_form_id: String,
+    pub mutation_stage: u32,
+    pub xp: u64,
+    pub threshold_xp: u64,
+    pub work_a_xp: u64,
+    pub work_b_xp: u64,
+    pub sponsor_level: u8,
+    pub burner_level: u8,
+    pub form_a_weight: u64,
+    pub form_b_weight: u64,
+    pub form_a_probability_bps: u32,
+    pub form_b_probability_bps: u32,
 }
 
 pub fn action_cost_atomic(action: LivingActionKind) -> u128 {
@@ -90,4 +119,39 @@ pub fn action_duration_ns(action: LivingActionKind) -> u64 {
         LivingActionKind::Feed => FEED_DURATION_NS,
         LivingActionKind::WorkA | LivingActionKind::WorkB => WORK_DURATION_NS,
     }
+}
+
+pub fn behavior_level(spent_atomic: u128) -> u8 {
+    if spent_atomic >= 40 * NUVE_UNIT {
+        3
+    } else if spent_atomic >= 20 * NUVE_UNIT {
+        2
+    } else if spent_atomic >= 5 * NUVE_UNIT {
+        1
+    } else {
+        0
+    }
+}
+
+pub fn mutation_weights(state: &LivingState) -> (u64, u64, u8, u8) {
+    let sponsor_level = behavior_level(state.sponsor_spent);
+    let burner_level = behavior_level(state.burner_spent);
+
+    let form_a_weight = MUTATION_BASE_WEIGHT
+        .saturating_add(state.work_a_xp.saturating_mul(MUTATION_WORK_XP_WEIGHT))
+        .saturating_add((sponsor_level as u64).saturating_mul(MUTATION_BEHAVIOR_LEVEL_WEIGHT));
+
+    let form_b_weight = MUTATION_BASE_WEIGHT
+        .saturating_add(state.work_b_xp.saturating_mul(MUTATION_WORK_XP_WEIGHT))
+        .saturating_add((burner_level as u64).saturating_mul(MUTATION_BEHAVIOR_LEVEL_WEIGHT));
+
+    (form_a_weight, form_b_weight, sponsor_level, burner_level)
+}
+
+pub fn mutation_probability_bps(form_a_weight: u64, form_b_weight: u64) -> (u32, u32) {
+    let total = form_a_weight.saturating_add(form_b_weight);
+    assert!(total > 0, "Mutation weight total must be positive");
+
+    let form_a_bps = ((form_a_weight as u128) * 10_000u128 / (total as u128)) as u32;
+    (form_a_bps, 10_000u32 - form_a_bps)
 }

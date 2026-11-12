@@ -35,3 +35,15 @@ Implemented:
 - failed route returns the full amount for NEP-141 refund resolution;
 - burn is blocked while a settlement is pending;
 - callback settlement IDs prevent stale settlement finalization.
+
+## Living Actions V1
+
+Implemented:
+
+- only the current NFT owner may complete an action;
+- completion before `ready_at_ns` is rejected;
+- Work A/B completion mutates XP synchronously;
+- Feed keeps its action lock until the NUVE reward call succeeds;
+- Feed reward IDs are deterministic from `token_id + ready_at_ns`, so a retry cannot mint twice;
+- failed Feed reward calls leave the ready action retryable;
+- transfer and burn are blocked while a Living action is active, preventing owner changes during asynchronous reward settlement.

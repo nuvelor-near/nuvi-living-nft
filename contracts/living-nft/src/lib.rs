@@ -30,6 +30,8 @@ const GAS_FOR_NFT_RESOLVE_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_FOR_NFT_ON_APPROVE: Gas = Gas::from_tgas(10);
 const GAS_FOR_NUVE_ROUTE: Gas = Gas::from_tgas(20);
 const GAS_FOR_LIVING_PAYMENT_CALLBACK: Gas = Gas::from_tgas(20);
+const GAS_FOR_GAME_REWARD: Gas = Gas::from_tgas(20);
+const GAS_FOR_FEED_REWARD_CALLBACK: Gas = Gas::from_tgas(20);
 const MIN_STORAGE_BYTES: u128 = 1_000;
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -94,6 +96,13 @@ trait NftResolver {
         settlement_id: u64,
         amount: U128,
     ) -> U128;
+
+    fn on_feed_reward_minted(
+        &mut self,
+        token_id: TokenId,
+        owner_id: AccountId,
+        ready_at_ns: u64,
+    ) -> bool;
 }
 
 #[ext_contract(ext_nuve_ft)]
@@ -101,6 +110,8 @@ trait NftResolver {
 trait NuveFt {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
     fn burn(&mut self, amount: U128) -> U128;
+    fn mint_game_reward(&mut self, receiver_id: AccountId, reward_id: String, amount: U128)
+        -> bool;
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -661,6 +672,141 @@ impl Contract {
             .map(PendingLivingPaymentView::from)
     }
 
+    pub fn complete_living_action(&mut self, token_id: TokenId) -> PromiseOrValue<bool> {
+        let token = self.tokens_by_id.get(&token_id).expect("Token not found");
+        let caller = env::predecessor_account_id();
+        assert_eq!(
+            token.owner_id, caller,
+            "Only current NFT owner may complete an action"
+        );
+        assert!(
+            self.pending_living_payment_by_token
+                .get(&token_id)
+                .is_none(),
+            "Living payment settlement is pending"
+        );
+
+        let mut state = self
+            .living_state_by_id
+            .get(&token_id)
+            .expect("Living state not found");
+        let action = state.active_action.expect("No active Living action");
+        assert!(
+            state.ready_at_ns > 0 && env::block_timestamp() >= state.ready_at_ns,
+            "Living action is not ready"
+        );
+
+        match action {
+            LivingActionKind::Feed => {
+                let ready_at_ns = state.ready_at_ns;
+                let reward_id = format!("feed:{}:{}", token_id, ready_at_ns);
+
+                events::log_event(
+                    "living_feed_reward_pending",
+                    serde_json::json!({
+                        "token_id": token_id,
+                        "owner_id": caller,
+                        "reward_id": reward_id,
+                        "amount": U128(NUVE_UNIT),
+                    }),
+                );
+
+                PromiseOrValue::Promise(
+                    ext_nuve_ft::ext(self.nuve_ft_id.clone())
+                        .with_static_gas(GAS_FOR_GAME_REWARD)
+                        .mint_game_reward(caller.clone(), reward_id, U128(NUVE_UNIT))
+                        .then(
+                            ext_self::ext(env::current_account_id())
+                                .with_static_gas(GAS_FOR_FEED_REWARD_CALLBACK)
+                                .on_feed_reward_minted(token_id, caller, ready_at_ns),
+                        ),
+                )
+            }
+            LivingActionKind::WorkA | LivingActionKind::WorkB => {
+                state.xp = state.xp.checked_add(1).expect("XP overflow");
+                match action {
+                    LivingActionKind::WorkA => {
+                        state.work_a_xp =
+                            state.work_a_xp.checked_add(1).expect("Work A XP overflow");
+                    }
+                    LivingActionKind::WorkB => {
+                        state.work_b_xp =
+                            state.work_b_xp.checked_add(1).expect("Work B XP overflow");
+                    }
+                    LivingActionKind::Feed => unreachable!(),
+                }
+                state.active_action = None;
+                state.ready_at_ns = 0;
+                self.living_state_by_id.insert(&token_id, &state);
+
+                events::log_event(
+                    "living_action_completed",
+                    serde_json::json!({
+                        "token_id": token_id,
+                        "owner_id": caller,
+                        "action": action,
+                        "xp": state.xp,
+                        "work_a_xp": state.work_a_xp,
+                        "work_b_xp": state.work_b_xp,
+                    }),
+                );
+
+                PromiseOrValue::Value(true)
+            }
+        }
+    }
+
+    #[private]
+    pub fn on_feed_reward_minted(
+        &mut self,
+        token_id: TokenId,
+        owner_id: AccountId,
+        ready_at_ns: u64,
+    ) -> bool {
+        let reward_call_succeeded = env::promise_result_checked(0, 4_096).is_ok();
+        if !reward_call_succeeded {
+            events::log_event(
+                "living_feed_reward_failed",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "owner_id": owner_id,
+                    "ready_at_ns": ready_at_ns,
+                }),
+            );
+            return false;
+        }
+
+        let Some(token) = self.tokens_by_id.get(&token_id) else {
+            return false;
+        };
+        if token.owner_id != owner_id {
+            return false;
+        }
+
+        let Some(mut state) = self.living_state_by_id.get(&token_id) else {
+            return false;
+        };
+        if state.active_action != Some(LivingActionKind::Feed) || state.ready_at_ns != ready_at_ns {
+            return false;
+        }
+
+        state.active_action = None;
+        state.ready_at_ns = 0;
+        self.living_state_by_id.insert(&token_id, &state);
+
+        events::log_event(
+            "living_action_completed",
+            serde_json::json!({
+                "token_id": token_id,
+                "owner_id": owner_id,
+                "action": LivingActionKind::Feed,
+                "reward": U128(NUVE_UNIT),
+            }),
+        );
+
+        true
+    }
+
     #[private]
     pub fn on_living_payment_routed(
         &mut self,
@@ -840,7 +986,7 @@ impl Contract {
         assert!(!self.pause_flags.burn_paused, "Burn is paused");
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         self.assert_can_burn(&token);
-        self.assert_no_pending_living_payment(&token_id);
+        self.assert_living_token_unlocked(&token_id);
         self.internal_burn(&token_id, memo);
     }
 
@@ -866,7 +1012,7 @@ impl Contract {
             if !privileged {
                 assert_eq!(token.owner_id, caller, "Caller is not token owner");
             }
-            self.assert_no_pending_living_payment(token_id);
+            self.assert_living_token_unlocked(token_id);
         }
         for token_id in token_ids {
             self.internal_burn(&token_id, memo.clone());
@@ -891,6 +1037,7 @@ impl Contract {
         assert!(!self.pause_flags.transfers_paused, "Transfers are paused");
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         self.assert_approved_or_owner(&token, approval_id);
+        self.assert_living_token_unlocked(&token_id);
         self.internal_transfer_unchecked(&token_id, &receiver_id, memo);
     }
 
@@ -907,6 +1054,7 @@ impl Contract {
         assert!(!self.pause_flags.transfers_paused, "Transfers are paused");
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         self.assert_approved_or_owner(&token, approval_id);
+        self.assert_living_token_unlocked(&token_id);
         let previous_owner_id = token.owner_id.clone();
         let approved_account_ids = Some(token.approved_account_ids.clone());
         self.internal_transfer_unchecked(&token_id, &receiver_id, memo);
@@ -1162,6 +1310,7 @@ impl Contract {
         assert!(!self.pause_flags.transfers_paused, "Transfers are paused");
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         self.assert_approved_or_owner(&token, approval_id);
+        self.assert_living_token_unlocked(&token_id);
         let payout = self.calculate_payout(&token_id, balance, max_len_payout);
         self.internal_transfer_unchecked(&token_id, &receiver_id, None);
         payout
@@ -1498,6 +1647,16 @@ impl Contract {
             self.pending_living_payment_by_token.get(token_id).is_none(),
             "Living payment settlement is pending"
         );
+    }
+
+    fn assert_living_token_unlocked(&self, token_id: &TokenId) {
+        self.assert_no_pending_living_payment(token_id);
+        if let Some(state) = self.living_state_by_id.get(token_id) {
+            assert!(
+                state.active_action.is_none(),
+                "NFT is locked while a Living action is active"
+            );
+        }
     }
 
     fn generate_next_token_id(&mut self) -> TokenId {

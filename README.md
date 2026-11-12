@@ -32,11 +32,13 @@ Implemented and source-tested:
 - LivingState V4 foundation for persistent player-shaped NFT identity;
 - isolated NUVE demo FT with one-time starter claim and bounded idempotent game rewards;
 - Living Settlement V1 / contract state V5:
-  `ft_transfer_call → Sponsor/Burn route → callback → Feed/Work timer`.
+  `ft_transfer_call → Sponsor/Burn route → callback → Feed/Work timer`;
+- Living Actions V1:
+  ready Work A/B actions award XP and affinity; ready Feed actions mint a retry-safe 1 NUVE reward before the timer is cleared.
 
 The private NUVELOR production repository remains separate. This repository must never contain production secrets, private infrastructure configuration, AI_MEMORY data, deploy credentials, or private keys.
 
-See `docs/LIVING_STATE_V1.md`, `docs/NUVE_FT_V1.md` and `docs/LIVING_SETTLEMENT_V1.md`.
+See `docs/LIVING_STATE_V1.md`, `docs/NUVE_FT_V1.md`, `docs/LIVING_SETTLEMENT_V1.md` and `docs/LIVING_ACTIONS_V1.md`.
 
 ## Planned repository structure
 

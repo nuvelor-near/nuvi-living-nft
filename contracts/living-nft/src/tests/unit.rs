@@ -1758,6 +1758,248 @@ fn pending_living_payment_blocks_duplicate_payment_and_nft_burn() {
     assert!(contract.nft_token(token_id).is_some());
 }
 
+fn start_paid_living_action(
+    contract: &mut Contract,
+    token_id: &TokenId,
+    owner_id: &str,
+    action: LivingActionKind,
+    route: EconomicRoute,
+    callback_timestamp_ns: u64,
+) {
+    let amount = action_cost_atomic(action);
+    context("nuve-demo.testnet", 0);
+    let result =
+        near_contract_standards::fungible_token::receiver::FungibleTokenReceiver::ft_on_transfer(
+            contract,
+            account(owner_id),
+            U128(amount),
+            living_payment_msg(token_id.clone(), action, route),
+        );
+    assert!(matches!(result, near_sdk::PromiseOrValue::Promise(_)));
+
+    let pending = contract
+        .get_pending_living_payment(token_id.clone())
+        .expect("pending payment must exist");
+
+    callback_context(
+        callback_timestamp_ns,
+        near_sdk::PromiseResult::Successful(Vec::new()),
+    );
+    assert_eq!(
+        contract.on_living_payment_routed(token_id.clone(), pending.settlement_id, U128(amount)),
+        U128(0)
+    );
+}
+
+#[test]
+fn ready_work_a_completion_awards_one_xp_and_clears_timer() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Worker A", "alice.near");
+    let token_id = minted.token_id;
+
+    let started_at = 5_000_000_000_000;
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::WorkA,
+        EconomicRoute::Sponsor,
+        started_at,
+    );
+
+    let ready_at = contract
+        .get_living_state(token_id.clone())
+        .unwrap()
+        .ready_at_ns;
+    assert_eq!(ready_at, started_at + WORK_DURATION_NS);
+
+    context_at("alice.near", 0, ready_at);
+    let result = contract.complete_living_action(token_id.clone());
+    assert!(matches!(result, near_sdk::PromiseOrValue::Value(true)));
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.xp, 1);
+    assert_eq!(state.work_a_xp, 1);
+    assert_eq!(state.work_b_xp, 0);
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
+}
+
+#[test]
+fn ready_work_b_completion_updates_work_b_affinity() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Worker B", "alice.near");
+    let token_id = minted.token_id;
+
+    let started_at = 6_000_000_000_000;
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::WorkB,
+        EconomicRoute::Burn,
+        started_at,
+    );
+
+    let ready_at = started_at + WORK_DURATION_NS;
+    context_at("alice.near", 0, ready_at);
+    assert!(matches!(
+        contract.complete_living_action(token_id.clone()),
+        near_sdk::PromiseOrValue::Value(true)
+    ));
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.xp, 1);
+    assert_eq!(state.work_a_xp, 0);
+    assert_eq!(state.work_b_xp, 1);
+    assert_eq!(state.burner_spent, U128(WORK_COST_ATOMIC));
+}
+
+#[test]
+fn feed_completion_waits_for_reward_callback_then_clears_timer() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Feeder", "alice.near");
+    let token_id = minted.token_id;
+
+    let started_at = 7_000_000_000_000;
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::Feed,
+        EconomicRoute::Sponsor,
+        started_at,
+    );
+
+    let ready_at = started_at + FEED_DURATION_NS;
+    context_at("alice.near", 0, ready_at);
+    let result = contract.complete_living_action(token_id.clone());
+    assert!(matches!(result, near_sdk::PromiseOrValue::Promise(_)));
+
+    let before_callback = contract.get_living_state(token_id.clone()).unwrap();
+    assert_eq!(before_callback.active_action, Some(LivingActionKind::Feed));
+    assert_eq!(before_callback.ready_at_ns, ready_at);
+
+    callback_context(
+        ready_at,
+        near_sdk::PromiseResult::Successful(b"true".to_vec()),
+    );
+    assert!(contract.on_feed_reward_minted(token_id.clone(), account("alice.near"), ready_at,));
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
+    assert_eq!(state.xp, 0);
+}
+
+#[test]
+fn failed_feed_reward_keeps_ready_action_retryable() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Feed retry", "alice.near");
+    let token_id = minted.token_id;
+
+    let started_at = 8_000_000_000_000;
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::Feed,
+        EconomicRoute::Burn,
+        started_at,
+    );
+
+    let ready_at = started_at + FEED_DURATION_NS;
+    context_at("alice.near", 0, ready_at);
+    assert!(matches!(
+        contract.complete_living_action(token_id.clone()),
+        near_sdk::PromiseOrValue::Promise(_)
+    ));
+
+    callback_context(ready_at, near_sdk::PromiseResult::Failed);
+    assert!(!contract.on_feed_reward_minted(token_id.clone(), account("alice.near"), ready_at,));
+
+    let state = contract.get_living_state(token_id.clone()).unwrap();
+    assert_eq!(state.active_action, Some(LivingActionKind::Feed));
+    assert_eq!(state.ready_at_ns, ready_at);
+
+    context_at("alice.near", 0, ready_at + 1);
+    assert!(matches!(
+        contract.complete_living_action(token_id),
+        near_sdk::PromiseOrValue::Promise(_)
+    ));
+}
+
+#[test]
+fn action_completion_rejects_early_or_non_owner() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Guarded completion", "alice.near");
+    let token_id = minted.token_id;
+
+    let started_at = 9_000_000_000_000;
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::WorkA,
+        EconomicRoute::Sponsor,
+        started_at,
+    );
+    let ready_at = started_at + WORK_DURATION_NS;
+
+    context_at("alice.near", 0, ready_at - 1);
+    let early = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = contract.complete_living_action(token_id.clone());
+    }));
+    assert!(early.is_err());
+
+    context_at("bob.near", 0, ready_at);
+    let non_owner = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = contract.complete_living_action(token_id.clone());
+    }));
+    assert!(non_owner.is_err());
+
+    let state = contract.get_living_state(token_id).unwrap();
+    assert_eq!(state.xp, 0);
+    assert_eq!(state.active_action, Some(LivingActionKind::WorkA));
+}
+
+#[test]
+fn active_living_action_locks_transfer_and_burn() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Locked", "alice.near");
+    let token_id = minted.token_id;
+
+    start_paid_living_action(
+        &mut contract,
+        &token_id,
+        "alice.near",
+        LivingActionKind::WorkB,
+        EconomicRoute::Sponsor,
+        10_000_000_000_000,
+    );
+
+    context("alice.near", 1);
+    let transfer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.nft_transfer(account("bob.near"), token_id.clone(), None, None);
+    }));
+    assert!(transfer.is_err());
+
+    context("alice.near", 1);
+    let burn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.nft_burn(token_id.clone(), None);
+    }));
+    assert!(burn.is_err());
+
+    assert_eq!(
+        contract.nft_token(token_id.clone()).unwrap().owner_id,
+        account("alice.near")
+    );
+    assert_eq!(
+        contract.get_living_state(token_id).unwrap().active_action,
+        Some(LivingActionKind::WorkB)
+    );
+}
+
 #[test]
 fn migrate_v4_to_v5_preserves_living_state_and_sets_game_accounts() {
     let mut before = contract();

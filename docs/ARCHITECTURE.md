@@ -7,9 +7,10 @@ Planned components:
 - NEP-171 ownership
 - LivingState
 - Feed / Work payment settlement and timers — implemented
-- XP / action completion — next
+- XP / action completion — implemented
+- retry-safe Feed NUVE reward — implemented
 - economic behavior counters — Sponsor/Burn spend implemented
-- mutation
+- mutation — next
 - dynamic metadata/media
 - history/events
 
@@ -19,7 +20,7 @@ Planned components:
 - starter claim
 - Treasury route
 - Burn route
-- bounded gameplay reward minting
+- bounded idempotent gameplay reward minting
 
 ## Web demo
 

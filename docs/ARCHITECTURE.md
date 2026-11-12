@@ -1,40 +1,57 @@
 # Architecture
 
-Planned components:
-
 ## Living NFT contract
 
-- NEP-171 ownership
+- NEP-171 ownership — implemented
 - one free self-service starter NUVI per account — implemented
-- LivingState
+- LivingState — implemented
 - Feed / Work payment settlement and timers — implemented
 - XP / action completion — implemented
 - retry-safe Feed NUVE reward — implemented
-- personal economic behavior counters — Sponsor/Burn spend implemented
+- personal economic behavior counters — implemented
 - mutation preview + first Form A/Form B mutation — implemented
 - Global NUVE Treasury/Burn totals + bps view — implemented
+- dynamic metadata/media from LivingState form + collection base URI — implemented
 - bounded community alignment influence — pending exact agreed cap
-- dynamic metadata/media — next
-- history/events
 
 ## NUVE Demo FT
 
-- NEP-141
-- starter claim
-- Treasury route
-- Burn route
-- bounded idempotent gameplay reward minting
+- NEP-141 — implemented
+- one-time starter claim — implemented
+- Treasury route — implemented
+- Burn route — implemented
+- bounded idempotent gameplay reward minting — implemented
 
 ## Web demo
 
-- guest Testnet onboarding
-- wallet fallback
-- direct contract-state reads
-- explorer proof
+Implemented:
+
+- Testnet-only `@hot-labs/near-connect` wallet layer derived from NUVELOR production connector;
+- exact local HOT wallet executor copied from NUVELOR and SHA-verified;
+- direct NEAR JSON-RPC view calls;
+- one-time Starter NUVI claim;
+- FT storage registration + Starter NUVE claim;
+- NUVE balance and NFT/LivingState reads;
+- Feed / Work A / Work B with Treasury or Burn route;
+- timer and completion UI;
+- mutation probability preview and mutation call;
+- Global Alignment totals/shares;
+- Testnet explorer links and recent transaction evidence;
+- responsive mobile layout;
+- generated form asset sync into public `/forms/`.
+
+Next critical gate:
+
+- isolated Testnet account binding and deployment;
+- real wallet E2E transactions;
+- screenshots/video and submission evidence.
 
 ## Testnet sponsor
 
-- bounded Testnet funding only
-- no production credentials
+Deferred until wallet-first Testnet E2E is proven.
+
+- bounded Testnet funding only;
+- no production credentials;
+- add only if judge onboarding needs it.
 
 Production NUVELOR contracts are outside this Hackathon execution boundary.

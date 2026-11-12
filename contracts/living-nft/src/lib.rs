@@ -2116,15 +2116,99 @@ impl Contract {
     }
 
     fn token_view(&self, token: Token) -> TokenView {
+        let stored_metadata = self
+            .token_metadata_by_id
+            .get(&token.token_id)
+            .expect("Token metadata not found");
+
         TokenView {
             token_id: token.token_id.clone(),
             owner_id: token.owner_id,
-            metadata: self
-                .token_metadata_by_id
-                .get(&token.token_id)
-                .expect("Token metadata not found"),
+            metadata: self.dynamic_token_metadata(&token.token_id, stored_metadata),
             approved_account_ids: token.approved_account_ids,
         }
+    }
+
+    fn dynamic_token_metadata(
+        &self,
+        token_id: &TokenId,
+        mut metadata: TokenMetadata,
+    ) -> TokenMetadata {
+        let Some(state) = self.living_state_by_id.get(token_id) else {
+            return metadata;
+        };
+
+        // Caller-supplied explicit media remains authoritative. Starter NUVI
+        // intentionally stores no media, so its public NEP-171 view derives
+        // the current visual form from collection.base_uri.
+        if metadata.media.is_none() {
+            if let Some(collection) = self.metadata.get() {
+                if let Some(base_uri) = collection.base_uri {
+                    let form_file = match state.form_id.as_str() {
+                        BASIC_FORM_ID => Some("basic.png"),
+                        FORM_A_ID => Some("form_a.png"),
+                        FORM_B_ID => Some("form_b.png"),
+                        _ => None,
+                    };
+                    if let Some(form_file) = form_file {
+                        metadata.media =
+                            Some(format!("{}/{}", base_uri.trim_end_matches('/'), form_file));
+                    }
+                }
+            }
+        }
+
+        let mut extra = metadata
+            .extra
+            .as_deref()
+            .and_then(|raw| near_sdk::serde_json::from_str::<near_sdk::serde_json::Value>(raw).ok())
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+
+        extra.insert(
+            "form_id".to_string(),
+            near_sdk::serde_json::Value::String(state.form_id.clone()),
+        );
+        extra.insert(
+            "level".to_string(),
+            near_sdk::serde_json::Value::from(state.level),
+        );
+        extra.insert(
+            "xp".to_string(),
+            near_sdk::serde_json::Value::from(state.xp),
+        );
+        extra.insert(
+            "mutation_count".to_string(),
+            near_sdk::serde_json::Value::from(state.mutation_count),
+        );
+        extra.insert(
+            "work_a_xp".to_string(),
+            near_sdk::serde_json::Value::from(state.work_a_xp),
+        );
+        extra.insert(
+            "work_b_xp".to_string(),
+            near_sdk::serde_json::Value::from(state.work_b_xp),
+        );
+        extra.insert(
+            "sponsor_spent".to_string(),
+            near_sdk::serde_json::Value::String(state.sponsor_spent.to_string()),
+        );
+        extra.insert(
+            "burner_spent".to_string(),
+            near_sdk::serde_json::Value::String(state.burner_spent.to_string()),
+        );
+        extra.insert(
+            "active_action".to_string(),
+            near_sdk::serde_json::to_value(state.active_action)
+                .expect("Living action must serialize"),
+        );
+        extra.insert(
+            "ready_at_ns".to_string(),
+            near_sdk::serde_json::Value::from(state.ready_at_ns),
+        );
+
+        metadata.extra = Some(near_sdk::serde_json::Value::Object(extra).to_string());
+        metadata
     }
 
     fn internal_add_token_to_owner(&mut self, owner_id: &AccountId, token_id: &TokenId) {

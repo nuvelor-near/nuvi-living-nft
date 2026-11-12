@@ -186,7 +186,7 @@ fn owner_can_repair_collection_and_token_metadata_without_burning() {
     assert_eq!(updated_collection.base_uri, collection_metadata.base_uri);
     assert!(get_logs()
         .iter()
-        .any(|log| log.contains("\"event\":\"contract_metadata_updated\"")));
+        .any(|log| log.contains(r#""event":"contract_metadata_updated""#)));
 
     let stored_collection = contract.nft_metadata();
     assert_eq!(stored_collection.reference, collection_metadata.reference);
@@ -201,20 +201,81 @@ fn owner_can_repair_collection_and_token_metadata_without_burning() {
         contract.update_token_metadata(minted.token_id.clone(), new_token_metadata.clone());
     assert_eq!(updated_token.token_id, minted.token_id);
     assert_eq!(updated_token.owner_id, account("kvp_vs.tg"));
-    assert_eq!(updated_token.metadata, new_token_metadata);
+    assert_eq!(updated_token.metadata.title, new_token_metadata.title);
+    assert_eq!(updated_token.metadata.media, new_token_metadata.media);
+    assert_eq!(
+        updated_token.metadata.reference,
+        new_token_metadata.reference
+    );
+
+    let updated_extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(updated_token.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(updated_extra["type"], "Mascot");
+    assert_eq!(updated_extra["character"], "Nuvi");
+    assert_eq!(updated_extra["rarity"], "Common");
+    assert_eq!(updated_extra["form_id"], BASIC_FORM_ID);
+    assert_eq!(updated_extra["level"], 1);
+    assert_eq!(updated_extra["xp"], 0);
+
     assert!(get_logs()
         .iter()
-        .any(|log| log.contains("\"event\":\"token_metadata_updated\"")));
+        .any(|log| log.contains(r#""event":"token_metadata_updated""#)));
 
     let stored_token = contract.nft_token("1".to_string()).unwrap();
     assert_eq!(
         stored_token.metadata.media,
         Some("ipfs://bafybeicz63lmkptgvkbf4oomq53qlxuyngcuelwp6rvhveuejdz6shfx24".to_string())
     );
+    let stored_extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(stored_token.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(stored_extra["form_id"], BASIC_FORM_ID);
+    assert_eq!(stored_extra["level"], 1);
+}
+
+#[test]
+fn starter_media_tracks_living_form_from_collection_base_uri() {
+    let mut contract = contract();
+
+    let mut collection = contract.nft_metadata();
+    collection.base_uri = Some("https://demo.nuvelor.test/forms/".to_string());
+    context("owner.near", 1);
+    contract.update_contract_metadata(collection);
+
+    context_at("alice.near", 0, 51_000_000_000_000);
+    let starter = contract.claim_starter_nuvi();
+    let token_id = starter.token_id;
+
+    let basic = contract.nft_token(token_id.clone()).unwrap();
     assert_eq!(
-        stored_token.metadata.extra,
-        Some("{\"type\":\"Mascot\",\"character\":\"Nuvi\",\"rarity\":\"Common\"}".to_string())
+        basic.metadata.media.as_deref(),
+        Some("https://demo.nuvelor.test/forms/basic.png")
     );
+    let basic_extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(basic.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(basic_extra["form_id"], BASIC_FORM_ID);
+    assert_eq!(basic_extra["xp"], 0);
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.xp = MUTATION_THRESHOLD_XP;
+    state.work_a_xp = 4;
+    state.work_b_xp = 1;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    context_at("alice.near", 0, 51_000_000_000_001);
+    let mutated = contract.mutate(token_id.clone());
+    let after = contract.nft_token(token_id).unwrap();
+
+    let expected_media = format!("https://demo.nuvelor.test/forms/{}.png", mutated.form_id);
+    assert_eq!(
+        after.metadata.media.as_deref(),
+        Some(expected_media.as_str())
+    );
+
+    let after_extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(after.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(after_extra["form_id"], mutated.form_id);
+    assert_eq!(after_extra["xp"], MUTATION_THRESHOLD_XP);
+    assert_eq!(after_extra["mutation_count"], 1);
 }
 
 #[test]

@@ -11,7 +11,7 @@ const FUNDING_ACCOUNT = process.env.HACKATHON_FUNDING_ACCOUNT || "";
 const TGAS = 1_000_000_000_000n;
 const ONE_NEAR = 10n ** 24n;
 const NUVE_UNIT = 10_000n;
-const PLAYER_RESERVE = 15n * 10n ** 22n;
+const PLAYER_RESERVE = 4n * 10n ** 23n;
 
 if (NETWORK_ID !== "testnet") throw new Error("This E2E is Testnet-only");
 
@@ -171,6 +171,24 @@ if (!EXECUTE) process.exit(0);
 const transactions = [];
 const rejected = [];
 
+async function persistProgress(status, details = {}) {
+  const snapshot = {
+    schema: "nuvi-smart-account-testnet-e2e-progress-v1",
+    updated_at_utc: new Date().toISOString(),
+    status,
+    network_id: NETWORK_ID,
+    token_id: TOKEN_ID,
+    original_owner: PLAYER_ID,
+    second_owner: SECOND_OWNER_ID,
+    expected_child_account_id: String(expectedChild),
+    provisioning_deposit_yocto: provisioningDeposit.toString(),
+    transactions,
+    rejected,
+    ...details,
+  };
+  await writeFile(evidencePath, JSON.stringify(snapshot, null, 2) + "\n", "utf8");
+}
+
 if (topUp > 0n) {
   if (!FUNDING_ACCOUNT) {
     throw new Error("Player needs Testnet NEAR top-up; set HACKATHON_FUNDING_ACCOUNT");
@@ -188,6 +206,7 @@ if (topUp > 0n) {
     amount_yocto: topUp.toString(),
     tx_hash: txHash(outcome),
   });
+  await persistProgress("PLAYER_FUNDED");
 }
 
 if (!statusBefore) {
@@ -204,6 +223,7 @@ if (!statusBefore) {
     token_id: TOKEN_ID,
     tx_hash: txHash(outcome),
   });
+  await persistProgress("PROVISION_SUBMITTED");
 } else if (statusBefore === "failed") {
   throw new Error("Existing NUVI Account provisioning status is failed; refusing replay");
 }
@@ -217,6 +237,10 @@ const activeToken = await poll(
   "NUVI Account active metadata",
 );
 const activeExtra = parseExtra(activeToken);
+await persistProgress("ACCOUNT_ACTIVE", {
+  metadata_status: activeExtra.nuvi_account_status,
+  metadata_nuvi_account_id: activeExtra.nuvi_account_id,
+});
 
 const childState = await poll(
   () => accountState(provider, expectedChild),
@@ -261,6 +285,7 @@ transactions.push({
   amount_atomic: NUVE_UNIT.toString(),
   tx_hash: txHash(ownerSend),
 });
+await persistProgress("OWNER_SEND_PASS");
 const afterOwnerSendBalance = BigInt(
   await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
 );
@@ -301,6 +326,7 @@ try {
     token_id: TOKEN_ID,
     tx_hash: txHash(transfer),
   });
+  await persistProgress("NFT_TRANSFERRED_TO_SECOND_OWNER");
 
   const transferredToken = await poll(
     () => view(reader, LIVING_ID, "nft_token", { token_id: TOKEN_ID }),
@@ -343,6 +369,7 @@ try {
     amount_atomic: NUVE_UNIT.toString(),
     tx_hash: txHash(newOwnerSend),
   });
+  await persistProgress("NEW_OWNER_SEND_PASS");
 
   const afterNewOwnerSendBalance = BigInt(
     await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
@@ -373,6 +400,7 @@ try {
         token_id: TOKEN_ID,
         tx_hash: txHash(restore),
       });
+      await persistProgress("OWNER_RESTORED");
     }
   }
 }

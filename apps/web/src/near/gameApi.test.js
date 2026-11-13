@@ -4,6 +4,8 @@ import {
   actionReady,
   buildLivingPaymentMessage,
   formatNuve,
+  parseNuve,
+  parseTokenExtra,
 } from "./gameApi";
 
 describe("NUVI Hackathon gameplay client", () => {
@@ -25,6 +27,32 @@ describe("NUVI Hackathon gameplay client", () => {
     expect(formatNuve("1000000")).toBe("100.0000");
     expect(formatNuve("50001")).toBe("5.0001");
     expect(formatNuve("0")).toBe("0.0000");
+  });
+
+
+
+  it("parses four-decimal NUVE to atomic units", () => {
+    expect(parseNuve("1")).toBe("10000");
+    expect(parseNuve("1.0001")).toBe("10001");
+    expect(() => parseNuve("0")).toThrow(/positive/);
+    expect(() => parseNuve("1.00001")).toThrow(/4 decimal/);
+  });
+
+  it("reads NUVI Account proof fields from token metadata extra", () => {
+    expect(
+      parseTokenExtra({
+        metadata: {
+          extra: JSON.stringify({
+            nuvi_account_status: "active",
+            nuvi_account_id: "nuvi-7.demo.testnet",
+          }),
+        },
+      }),
+    ).toEqual({
+      nuvi_account_status: "active",
+      nuvi_account_id: "nuvi-7.demo.testnet",
+    });
+    expect(parseTokenExtra({ metadata: { extra: "not-json" } })).toEqual({});
   });
 
   it("detects action readiness from nanosecond timestamps", () => {

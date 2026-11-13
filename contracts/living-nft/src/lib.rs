@@ -34,7 +34,15 @@ const GAS_FOR_NUVE_ROUTE: Gas = Gas::from_tgas(20);
 const GAS_FOR_LIVING_PAYMENT_CALLBACK: Gas = Gas::from_tgas(20);
 const GAS_FOR_GAME_REWARD: Gas = Gas::from_tgas(20);
 const GAS_FOR_FEED_REWARD_CALLBACK: Gas = Gas::from_tgas(20);
+const GAS_FOR_NUVI_ACCOUNT_INIT: Gas = Gas::from_tgas(20);
+const GAS_FOR_NUVI_ACCOUNT_CALLBACK: Gas = Gas::from_tgas(20);
+const GAS_FOR_NUVE_STORAGE_DEPOSIT: Gas = Gas::from_tgas(20);
+const GAS_FOR_NUVI_ACCOUNT_FINAL_CALLBACK: Gas = Gas::from_tgas(20);
 const MIN_STORAGE_BYTES: u128 = 1_000;
+const NUVI_ACCOUNT_OPERATIONAL_RESERVE_YOCTO: u128 = 100_000_000_000_000_000_000_000;
+const NUVE_STORAGE_DEPOSIT_YOCTO: u128 = 1_250_000_000_000_000_000_000;
+const NUVI_ACCOUNT_DEMO_REWARD_ATOMIC: u128 = 100 * NUVE_UNIT;
+const NUVI_ACCOUNT_WASM: &[u8] = include_bytes!("../res/nuvi_account.wasm");
 
 #[derive(BorshSerialize, BorshStorageKey)]
 pub enum StorageKey {
@@ -106,6 +114,24 @@ trait NftResolver {
         owner_id: AccountId,
         ready_at_ns: u64,
     ) -> bool;
+
+    fn on_nuvi_account_created(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> PromiseOrValue<bool>;
+
+    fn on_nuvi_account_storage_registered(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> PromiseOrValue<bool>;
+
+    fn on_nuvi_account_reward_minted(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> bool;
 }
 
 #[ext_contract(ext_nuve_ft)]
@@ -115,6 +141,11 @@ trait NuveFt {
     fn burn(&mut self, amount: U128) -> U128;
     fn mint_game_reward(&mut self, receiver_id: AccountId, reward_id: String, amount: U128)
         -> bool;
+    fn storage_deposit(
+        &mut self,
+        account_id: Option<AccountId>,
+        registration_only: Option<bool>,
+    ) -> StorageBalance;
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -883,6 +914,115 @@ impl Contract {
         })
     }
 
+    pub fn expected_nuvi_account_id(&self, token_id: TokenId) -> AccountId {
+        Self::derive_nuvi_account_id(&token_id)
+    }
+
+    pub fn nuvi_account_creation_deposit(&self) -> U128 {
+        U128(Self::nuvi_account_required_deposit_yocto())
+    }
+
+    #[payable]
+    pub fn provision_nuvi_account(&mut self, token_id: TokenId) -> AccountId {
+        let token = self.tokens_by_id.get(&token_id).expect("Token not found");
+        let caller = env::predecessor_account_id();
+        assert_eq!(
+            token.owner_id, caller,
+            "Only current NFT owner may provision NUVI Account"
+        );
+        self.assert_living_token_unlocked(&token_id);
+
+        let state = self
+            .living_state_by_id
+            .get(&token_id)
+            .expect("Living state not found");
+        assert!(
+            state.mutation_count > 0,
+            "NUVI must be mutated before account provisioning"
+        );
+
+        let metadata = self
+            .token_metadata_by_id
+            .get(&token_id)
+            .expect("Token metadata not found");
+        let existing_status = metadata
+            .extra
+            .as_deref()
+            .and_then(|raw| near_sdk::serde_json::from_str::<near_sdk::serde_json::Value>(raw).ok())
+            .and_then(|value| {
+                value
+                    .get("nuvi_account_status")
+                    .and_then(|status| status.as_str())
+                    .map(ToString::to_string)
+            });
+        assert!(
+            existing_status.is_none(),
+            "NUVI Account provisioning already started"
+        );
+
+        let required_deposit = Self::nuvi_account_required_deposit_yocto();
+        let attached_deposit = env::attached_deposit().as_yoctonear();
+        assert!(
+            attached_deposit >= required_deposit,
+            "Insufficient deposit for NUVI Account provisioning"
+        );
+        if attached_deposit > required_deposit {
+            Promise::new(caller.clone())
+                .transfer(NearToken::from_yoctonear(
+                    attached_deposit - required_deposit,
+                ))
+                .detach();
+        }
+
+        let nuvi_account_id = Self::derive_nuvi_account_id(&token_id);
+        self.set_nuvi_account_metadata_status(
+            &token_id,
+            "provisioning",
+            Some(&nuvi_account_id),
+            None,
+            false,
+        );
+
+        let child_balance = Self::nuvi_account_child_balance_yocto();
+        let init_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
+            "nft_contract_id": env::current_account_id(),
+            "token_id": token_id,
+            "nuve_ft_id": self.nuve_ft_id,
+        }))
+        .expect("NUVI Account init arguments must serialize");
+
+        Promise::new(nuvi_account_id.clone())
+            .create_account()
+            .transfer(NearToken::from_yoctonear(child_balance))
+            .deploy_contract(NUVI_ACCOUNT_WASM.to_vec())
+            .function_call(
+                "new".to_string(),
+                init_args,
+                NearToken::from_yoctonear(0),
+                GAS_FOR_NUVI_ACCOUNT_INIT,
+            )
+            .then(
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_NUVI_ACCOUNT_CALLBACK)
+                    .on_nuvi_account_created(token_id.clone(), nuvi_account_id.clone()),
+            )
+            .detach();
+
+        events::log_event(
+            "nuvi_account_provisioning_started",
+            serde_json::json!({
+                "token_id": token_id,
+                "owner_id": caller,
+                "nuvi_account_id": nuvi_account_id,
+                "child_balance": U128(child_balance),
+                "compatibility_provision": true,
+            }),
+        );
+
+        nuvi_account_id
+    }
+
+    #[payable]
     pub fn mutate(&mut self, token_id: TokenId) -> LivingStateView {
         let token = self.tokens_by_id.get(&token_id).expect("Token not found");
         let caller = env::predecessor_account_id();
@@ -899,6 +1039,22 @@ impl Contract {
             state.xp >= MUTATION_THRESHOLD_XP,
             "Mutation XP threshold is not reached"
         );
+
+        let required_deposit = Self::nuvi_account_required_deposit_yocto();
+        let attached_deposit = env::attached_deposit().as_yoctonear();
+        assert!(
+            attached_deposit >= required_deposit,
+            "Insufficient deposit for NUVI Account provisioning"
+        );
+        if attached_deposit > required_deposit {
+            Promise::new(caller.clone())
+                .transfer(NearToken::from_yoctonear(
+                    attached_deposit - required_deposit,
+                ))
+                .detach();
+        }
+
+        let nuvi_account_id = Self::derive_nuvi_account_id(&token_id);
 
         let (form_a_weight, form_b_weight, sponsor_level, burner_level) = mutation_weights(&state);
         let total_weight = form_a_weight
@@ -931,6 +1087,13 @@ impl Contract {
             .checked_add(1)
             .expect("Mutation count overflow");
         self.living_state_by_id.insert(&token_id, &state);
+        self.set_nuvi_account_metadata_status(
+            &token_id,
+            "provisioning",
+            Some(&nuvi_account_id),
+            None,
+            false,
+        );
 
         let mutation_id = format!("{}:{}", token_id, state.mutation_count);
         events::log_event(
@@ -952,7 +1115,170 @@ impl Contract {
             }),
         );
 
+        let child_balance = Self::nuvi_account_child_balance_yocto();
+        let init_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
+            "nft_contract_id": env::current_account_id(),
+            "token_id": token_id,
+            "nuve_ft_id": self.nuve_ft_id,
+        }))
+        .expect("NUVI Account init arguments must serialize");
+
+        Promise::new(nuvi_account_id.clone())
+            .create_account()
+            .transfer(NearToken::from_yoctonear(child_balance))
+            .deploy_contract(NUVI_ACCOUNT_WASM.to_vec())
+            .function_call(
+                "new".to_string(),
+                init_args,
+                NearToken::from_yoctonear(0),
+                GAS_FOR_NUVI_ACCOUNT_INIT,
+            )
+            .then(
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_NUVI_ACCOUNT_CALLBACK)
+                    .on_nuvi_account_created(token_id.clone(), nuvi_account_id.clone()),
+            )
+            .detach();
+
+        events::log_event(
+            "nuvi_account_provisioning_started",
+            serde_json::json!({
+                "token_id": token_id,
+                "owner_id": caller,
+                "nuvi_account_id": nuvi_account_id,
+                "child_balance": U128(child_balance),
+                "executor_wasm_sha256": env::sha256(NUVI_ACCOUNT_WASM)
+                    .iter()
+                    .map(|byte| format!("{:02x}", byte))
+                    .collect::<String>(),
+            }),
+        );
+
         LivingStateView::from(state)
+    }
+
+    #[private]
+    pub fn on_nuvi_account_created(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> PromiseOrValue<bool> {
+        if env::promise_result_checked(0, 4_096).is_err() {
+            self.set_nuvi_account_metadata_status(
+                &token_id,
+                "failed",
+                Some(&nuvi_account_id),
+                Some("create_deploy_init"),
+                false,
+            );
+            events::log_event(
+                "nuvi_account_provisioning_failed",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "nuvi_account_id": nuvi_account_id,
+                    "phase": "create_deploy_init",
+                }),
+            );
+            return PromiseOrValue::Value(false);
+        }
+
+        PromiseOrValue::Promise(
+            ext_nuve_ft::ext(self.nuve_ft_id.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(NUVE_STORAGE_DEPOSIT_YOCTO))
+                .with_static_gas(GAS_FOR_NUVE_STORAGE_DEPOSIT)
+                .storage_deposit(Some(nuvi_account_id.clone()), Some(true))
+                .then(
+                    ext_self::ext(env::current_account_id())
+                        .with_static_gas(GAS_FOR_NUVI_ACCOUNT_CALLBACK)
+                        .on_nuvi_account_storage_registered(token_id, nuvi_account_id),
+                ),
+        )
+    }
+
+    #[private]
+    pub fn on_nuvi_account_storage_registered(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> PromiseOrValue<bool> {
+        if env::promise_result_checked(0, 4_096).is_err() {
+            self.set_nuvi_account_metadata_status(
+                &token_id,
+                "failed",
+                Some(&nuvi_account_id),
+                Some("nuve_storage_registration"),
+                false,
+            );
+            events::log_event(
+                "nuvi_account_provisioning_failed",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "nuvi_account_id": nuvi_account_id,
+                    "phase": "nuve_storage_registration",
+                }),
+            );
+            return PromiseOrValue::Value(false);
+        }
+
+        let reward_id = format!("nuvi-account:{}:mutation:1", token_id);
+        PromiseOrValue::Promise(
+            ext_nuve_ft::ext(self.nuve_ft_id.clone())
+                .with_static_gas(GAS_FOR_GAME_REWARD)
+                .mint_game_reward(
+                    nuvi_account_id.clone(),
+                    reward_id,
+                    U128(NUVI_ACCOUNT_DEMO_REWARD_ATOMIC),
+                )
+                .then(
+                    ext_self::ext(env::current_account_id())
+                        .with_static_gas(GAS_FOR_NUVI_ACCOUNT_FINAL_CALLBACK)
+                        .on_nuvi_account_reward_minted(token_id, nuvi_account_id),
+                ),
+        )
+    }
+
+    #[private]
+    pub fn on_nuvi_account_reward_minted(
+        &mut self,
+        token_id: TokenId,
+        nuvi_account_id: AccountId,
+    ) -> bool {
+        if env::promise_result_checked(0, 4_096).is_err() {
+            self.set_nuvi_account_metadata_status(
+                &token_id,
+                "failed",
+                Some(&nuvi_account_id),
+                Some("demo_reward"),
+                false,
+            );
+            events::log_event(
+                "nuvi_account_provisioning_failed",
+                serde_json::json!({
+                    "token_id": token_id,
+                    "nuvi_account_id": nuvi_account_id,
+                    "phase": "demo_reward",
+                }),
+            );
+            return false;
+        }
+
+        let Some(state) = self.living_state_by_id.get(&token_id) else {
+            return false;
+        };
+        if state.mutation_count == 0 {
+            return false;
+        }
+
+        self.store_nuvi_account_id(&token_id, &nuvi_account_id);
+        events::log_event(
+            "nuvi_account_activated",
+            serde_json::json!({
+                "token_id": token_id,
+                "nuvi_account_id": nuvi_account_id,
+                "nuve_reward": U128(NUVI_ACCOUNT_DEMO_REWARD_ATOMIC),
+            }),
+        );
+        true
     }
 
     pub fn complete_living_action(&mut self, token_id: TokenId) -> PromiseOrValue<bool> {
@@ -1918,6 +2244,93 @@ impl Contract {
             global_burn_total: 0,
             starter_claimed_by_account: LookupMap::new(StorageKey::StarterClaimedByAccount),
         }
+    }
+
+    fn derive_nuvi_account_id(token_id: &TokenId) -> AccountId {
+        assert!(
+            !token_id.is_empty() && token_id.bytes().all(|byte| byte.is_ascii_digit()),
+            "Hackathon NUVI Account requires numeric token_id"
+        );
+        format!("nuvi-{}.{}", token_id, env::current_account_id())
+            .parse()
+            .expect("Derived NUVI Account ID is invalid or too long")
+    }
+
+    fn nuvi_account_child_balance_yocto() -> u128 {
+        (NUVI_ACCOUNT_WASM.len() as u128)
+            .checked_mul(env::storage_byte_cost().as_yoctonear())
+            .and_then(|value| value.checked_add(NUVI_ACCOUNT_OPERATIONAL_RESERVE_YOCTO))
+            .expect("NUVI Account balance overflow")
+    }
+
+    fn nuvi_account_required_deposit_yocto() -> u128 {
+        Self::nuvi_account_child_balance_yocto()
+            .checked_add(NUVE_STORAGE_DEPOSIT_YOCTO)
+            .expect("NUVI Account provisioning deposit overflow")
+    }
+
+    fn store_nuvi_account_id(&mut self, token_id: &TokenId, nuvi_account_id: &AccountId) {
+        self.set_nuvi_account_metadata_status(
+            token_id,
+            "active",
+            Some(nuvi_account_id),
+            None,
+            true,
+        );
+    }
+
+    fn set_nuvi_account_metadata_status(
+        &mut self,
+        token_id: &TokenId,
+        status: &str,
+        expected_account_id: Option<&AccountId>,
+        failure_phase: Option<&str>,
+        active: bool,
+    ) {
+        let mut metadata = self
+            .token_metadata_by_id
+            .get(token_id)
+            .expect("Token metadata not found");
+        let mut extra = metadata
+            .extra
+            .as_deref()
+            .and_then(|raw| near_sdk::serde_json::from_str::<near_sdk::serde_json::Value>(raw).ok())
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+
+        extra.insert(
+            "nuvi_account_status".to_string(),
+            near_sdk::serde_json::Value::String(status.to_string()),
+        );
+
+        if let Some(account_id) = expected_account_id {
+            extra.insert(
+                "nuvi_account_expected_id".to_string(),
+                near_sdk::serde_json::Value::String(account_id.to_string()),
+            );
+            if active {
+                extra.insert(
+                    "nuvi_account_id".to_string(),
+                    near_sdk::serde_json::Value::String(account_id.to_string()),
+                );
+            }
+        }
+
+        match failure_phase {
+            Some(phase) => {
+                extra.insert(
+                    "nuvi_account_failure_phase".to_string(),
+                    near_sdk::serde_json::Value::String(phase.to_string()),
+                );
+            }
+            None => {
+                extra.remove("nuvi_account_failure_phase");
+            }
+        }
+
+        metadata.extra = Some(near_sdk::serde_json::Value::Object(extra).to_string());
+        self.validate_metadata(&metadata);
+        self.token_metadata_by_id.insert(token_id, &metadata);
     }
 
     fn validate_contract_metadata(metadata: &NFTContractMetadata) {

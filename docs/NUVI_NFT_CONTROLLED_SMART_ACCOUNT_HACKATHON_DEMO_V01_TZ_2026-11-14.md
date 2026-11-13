@@ -325,3 +325,57 @@ NFT ownership
 → real owned asset
 → real outgoing blockchain action
 ```
+
+## 21. Implementation refinements verified on 2026-11-14
+
+These refinements were introduced during implementation after fresh Testnet/runtime verification and do not expand the judge-facing scope.
+
+### 21.1 Self-funded provisioning
+
+`mutate(token_id)` is payable. Frontend reads the exact current value from `nuvi_account_creation_deposit()` immediately before signing.
+
+The deposit covers:
+- child executor contract storage stake;
+- a bounded child operational NEAR reserve;
+- exact live NUVE NEP-145 registration deposit.
+
+Any excess attached deposit is returned to the caller.
+
+Reason: the Living NFT contract must not depend on its own liquid balance to create every NUVI Account.
+
+### 21.2 Existing mutated Testnet NUVI compatibility
+
+The live accepted Testnet already contains mutated NUVI tokens created before account provisioning existed.
+
+A bounded compatibility method `provision_nuvi_account(token_id)` is therefore allowed:
+- current NFT owner only;
+- token must already be mutated;
+- only when no NUVI Account provisioning status exists;
+- requires the same provisioning deposit;
+- starts the same child-account provisioning pipeline.
+
+It is not a replacement for automatic provisioning on new mutations. New mutations still start provisioning automatically.
+
+### 21.3 On-chain provisioning status without V8 migration
+
+Stored `TokenMetadata.extra` carries:
+- `nuvi_account_status`: `provisioning | active | failed`;
+- `nuvi_account_expected_id` while provisioning;
+- `nuvi_account_id` only after successful activation;
+- `nuvi_account_failure_phase` on failure.
+
+This keeps the existing V7 contract state layout unchanged while making frontend status chain-derived.
+
+### 21.4 Live Testnet storage fact
+
+Fresh `nuve-hack26.nvlborc70517034832.testnet::storage_balance_bounds()` returned exactly `0.00125 NEAR` for registration.
+
+Deployment code must still read/verify this value fresh before release instead of assuming it forever.
+
+### 21.5 Global Contract disposition
+
+NEAR Global Contracts were evaluated as a storage optimization. They reduce per-child code storage, but publishing this ~139 KB executor as a new global contract would currently burn roughly 13.9 Testnet NEAR under the protocol's global-contract storage pricing. That is disproportionate for this Hackathon demo and is not used in v0.1.
+
+### 21.6 Build distinction
+
+Oracle ARM64 can perform native Rust 1.86 development/test WASM builds. The canonical reproducible build image is AMD64 and cannot execute natively on Oracle without an emulation path. Release evidence must distinguish native Oracle build PASS from an AMD64 reproducible-build PASS.

@@ -756,3 +756,87 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.nuvi-account-panel {
+  border-color: rgba(93, 111, 255, 0.38);
+}
+
+.account-address {
+  display: grid;
+  gap: 5px;
+  margin: 14px 0;
+  border: 1px solid #30364a;
+  border-radius: 12px;
+  padding: 12px;
+  background: #101520;
+}
+
+.account-address span {
+  color: #7f899c;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.account-address strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.account-failure {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.nuvi-transfer {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.advanced-transfer {
+  border-top: 1px solid #292f40;
+  padding-top: 10px;
+}
+
+.advanced-transfer summary {
+  cursor: pointer;
+  color: #9aa4b6;
+  font-size: 12px;
+}
+
+.transfer-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.35fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.transfer-fields label {
+  display: grid;
+  gap: 5px;
+  color: #7f899c;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.transfer-fields input {
+  min-width: 0;
+  border: 1px solid #343b50;
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: #f4f6fb;
+  background: #121621;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+@media (max-width: 720px) {
+  .transfer-fields {
+    grid-template-columns: 1fr;
+  }
+}

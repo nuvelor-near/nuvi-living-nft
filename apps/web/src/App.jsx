@@ -16,6 +16,7 @@ import {
   loadTokenState,
   mutateNuvi,
   nsToMs,
+  sendNuviAccountNuve,
   startLivingAction,
 } from "./near/gameApi";
 import { extractTransactionHashes } from "./near/transactions";
@@ -85,11 +86,18 @@ export default function App() {
   const [error, setError] = useState("");
   const [activity, setActivity] = useState([]);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [nuviRecipient, setNuviRecipient] = useState("");
+  const [nuviAmount, setNuviAmount] = useState("1.0000");
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 500);
     return () => window.clearInterval(id);
   }, []);
+
+
+  useEffect(() => {
+    if (accountId) setNuviRecipient(accountId);
+  }, [accountId]);
 
   const refresh = useCallback(
     async (preferredTokenId = "") => {
@@ -118,6 +126,16 @@ export default function App() {
     },
     [accountId, selectedTokenId],
   );
+
+  useEffect(() => {
+    if (tokenState?.nuviAccount?.status !== "provisioning" || !selectedTokenId) {
+      return undefined;
+    }
+    const id = window.setInterval(() => {
+      void refresh(selectedTokenId);
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [refresh, selectedTokenId, tokenState?.nuviAccount?.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +213,7 @@ export default function App() {
   const token = tokenState?.token;
   const living = tokenState?.living;
   const mutation = tokenState?.mutation;
+  const nuviAccount = tokenState?.nuviAccount;
 
   const activeAction = living?.active_action || null;
   const ready = actionReady(living, nowMs);
@@ -604,6 +623,115 @@ export default function App() {
                             ? "Mutate NUVI"
                             : "Reach 5 XP to mutate"}
                       </button>
+                    </article>
+
+                    <article className="panel nuvi-account-panel">
+                      <div className="panel-head">
+                        <div>
+                          <span className="eyebrow">NFT-controlled account</span>
+                          <h3>NUVI Account</h3>
+                        </div>
+                        <span className={`status-pill ${nuviAccount?.status === "active" ? "ready" : ""}`}>
+                          {nuviAccount?.status === "not_created"
+                            ? "Not created"
+                            : nuviAccount?.status === "provisioning"
+                              ? "Provisioning"
+                              : nuviAccount?.status === "active"
+                                ? "Active"
+                                : nuviAccount?.status === "failed"
+                                  ? "Failed"
+                                  : "—"}
+                        </span>
+                      </div>
+
+                      <div className="account-address">
+                        <span>Smart account</span>
+                        <ExternalLink href={accountExplorerUrl(nuviAccount?.accountId)}>
+                          <strong>{nuviAccount?.accountId || "—"}</strong>
+                        </ExternalLink>
+                      </div>
+
+                      <div className="stats-grid account-proof-grid">
+                        <Stat label="Bound NFT" value={`NUVI #${selectedTokenId}`} />
+                        <Stat label="Controller" value={token?.owner_id || "—"} />
+                        <Stat
+                          label="Access keys"
+                          value={
+                            Array.isArray(nuviAccount?.accessKeys)
+                              ? `${nuviAccount.accessKeys.length} · ${nuviAccount.accessKeys.length === 0 ? "Locked" : "Unexpected"}`
+                              : "—"
+                          }
+                        />
+                        <Stat
+                          label="Executor"
+                          value={nuviAccount?.verified ? "Deployed · verified" : nuviAccount?.executor ? "Deployed" : "—"}
+                        />
+                        <Stat label="NUVE balance" value={`${formatNuve(nuviAccount?.nuveBalance || "0")} NUVE`} />
+                        <Stat label="NFT metadata" value={nuviAccount?.metadataStatus || "—"} />
+                      </div>
+
+                      {nuviAccount?.status === "failed" && (
+                        <div className="banner error account-failure">
+                          Provisioning failed{nuviAccount?.failurePhase ? `: ${nuviAccount.failurePhase}` : ""}.
+                        </div>
+                      )}
+
+                      {nuviAccount?.status === "active" && (
+                        <div className="nuvi-transfer">
+                          <button
+                            className="button primary"
+                            disabled={Boolean(busy) || !accountId}
+                            onClick={() =>
+                              void runTx("NUVI Account · Send 1 NUVE", () =>
+                                sendNuviAccountNuve(connector, {
+                                  nuviAccountId: nuviAccount.accountId,
+                                  receiverId: accountId,
+                                  amountNuve: "1.0000",
+                                }),
+                              )
+                            }
+                          >
+                            Send 1 NUVE to my wallet
+                          </button>
+
+                          <details className="advanced-transfer">
+                            <summary>Custom Testnet transfer</summary>
+                            <div className="transfer-fields">
+                              <label>
+                                Recipient
+                                <input
+                                  value={nuviRecipient}
+                                  onChange={(event) => setNuviRecipient(event.target.value)}
+                                  placeholder="account.testnet"
+                                />
+                              </label>
+                              <label>
+                                Amount (NUVE)
+                                <input
+                                  value={nuviAmount}
+                                  onChange={(event) => setNuviAmount(event.target.value)}
+                                  inputMode="decimal"
+                                />
+                              </label>
+                              <button
+                                className="button secondary"
+                                disabled={Boolean(busy) || !nuviRecipient || !nuviAmount}
+                                onClick={() =>
+                                  void runTx("NUVI Account · Custom transfer", () =>
+                                    sendNuviAccountNuve(connector, {
+                                      nuviAccountId: nuviAccount.accountId,
+                                      receiverId: nuviRecipient.trim(),
+                                      amountNuve: nuviAmount,
+                                    }),
+                                  )
+                                }
+                              >
+                                Send from NUVI Account
+                              </button>
+                            </div>
+                          </details>
+                        </div>
+                      )}
                     </article>
                   </div>
                 </section>

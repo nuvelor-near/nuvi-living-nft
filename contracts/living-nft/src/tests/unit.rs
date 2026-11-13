@@ -261,7 +261,8 @@ fn starter_media_tracks_living_form_from_collection_base_uri() {
     state.work_b_xp = 1;
     contract.living_state_by_id.insert(&token_id, &state);
 
-    context_at("alice.near", 0, 51_000_000_000_001);
+    let provisioning_deposit = contract.nuvi_account_creation_deposit().0;
+    context_at("alice.near", provisioning_deposit, 51_000_000_000_001);
     let mutated = contract.mutate(token_id.clone());
     let after = contract.nft_token(token_id).unwrap();
 
@@ -2186,7 +2187,8 @@ fn first_mutation_preserves_token_identity_and_xp_and_is_single_use() {
     state.sponsor_spent = 20 * NUVE_UNIT;
     contract.living_state_by_id.insert(&token_id, &state);
 
-    context_at("alice.near", 0, 20_000_000_000_000);
+    let provisioning_deposit = contract.nuvi_account_creation_deposit().0;
+    context_at("alice.near", provisioning_deposit, 20_000_000_000_000);
     let mutated = contract.mutate(token_id.clone());
 
     assert!(mutated.form_id == FORM_A_ID || mutated.form_id == FORM_B_ID);
@@ -2516,4 +2518,105 @@ fn legacy_batch_json_without_class_deserializes_as_none() {
     });
     let input: MintTokenInput = near_sdk::serde_json::from_value(value).unwrap();
     assert!(input.class.is_none());
+}
+
+#[test]
+fn nuvi_account_address_and_creation_deposit_are_deterministic() {
+    let contract = contract();
+    let account_id = contract.expected_nuvi_account_id("1".to_string());
+    assert_eq!(account_id, account("nuvi-1.nft.nuvelor.near"));
+
+    let code_storage = (NUVI_ACCOUNT_WASM.len() as u128) * env::storage_byte_cost().as_yoctonear();
+    let expected =
+        code_storage + NUVI_ACCOUNT_OPERATIONAL_RESERVE_YOCTO + NUVE_STORAGE_DEPOSIT_YOCTO;
+    assert_eq!(contract.nuvi_account_creation_deposit(), U128(expected));
+}
+
+#[test]
+fn mutation_requires_nuvi_account_provisioning_deposit() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Deposit guard", "alice.near");
+    let token_id = minted.token_id;
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.xp = MUTATION_THRESHOLD_XP;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    context("alice.near", 0);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.mutate(token_id.clone());
+    }));
+    assert!(result.is_err());
+    assert_eq!(
+        contract.get_living_state(token_id).unwrap().mutation_count,
+        0
+    );
+}
+
+#[test]
+fn successful_nuvi_account_final_callback_persists_metadata_binding() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Account bound", "alice.near");
+    let token_id = minted.token_id;
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.mutation_count = 1;
+    state.form_id = FORM_A_ID.to_string();
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    let child = account("nuvi-1.nft.nuvelor.near");
+    callback_context(
+        60_000_000_000_000,
+        near_sdk::PromiseResult::Successful(b"true".to_vec()),
+    );
+    assert!(contract.on_nuvi_account_reward_minted(token_id.clone(), child.clone()));
+
+    let token = contract.nft_token(token_id).unwrap();
+    let extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(token.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(extra["nuvi_account_id"], child.as_str());
+    assert_eq!(extra["mutation_count"], 1);
+}
+
+#[test]
+fn mutated_legacy_nuvi_owner_can_start_account_provisioning_once() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Legacy mutated", "alice.near");
+    let token_id = minted.token_id;
+
+    let mut state = contract.living_state_by_id.get(&token_id).unwrap();
+    state.mutation_count = 1;
+    state.form_id = FORM_A_ID.to_string();
+    state.xp = MUTATION_THRESHOLD_XP;
+    contract.living_state_by_id.insert(&token_id, &state);
+
+    let provisioning_deposit = contract.nuvi_account_creation_deposit().0;
+    context("alice.near", provisioning_deposit);
+    let child = contract.provision_nuvi_account(token_id.clone());
+    assert_eq!(child, account("nuvi-1.nft.nuvelor.near"));
+
+    let token = contract.nft_token(token_id.clone()).unwrap();
+    let extra: near_sdk::serde_json::Value =
+        near_sdk::serde_json::from_str(token.metadata.extra.as_deref().unwrap()).unwrap();
+    assert_eq!(extra["nuvi_account_status"], "provisioning");
+    assert_eq!(extra["nuvi_account_expected_id"], "nuvi-1.nft.nuvelor.near");
+
+    context("alice.near", provisioning_deposit);
+    let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.provision_nuvi_account(token_id.clone());
+    }));
+    assert!(duplicate.is_err());
+}
+
+#[test]
+fn unmutated_nuvi_cannot_use_compatibility_provisioning() {
+    let mut contract = contract();
+    let minted = mint(&mut contract, "Not mutated", "alice.near");
+    let provisioning_deposit = contract.nuvi_account_creation_deposit().0;
+
+    context("alice.near", provisioning_deposit);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        contract.provision_nuvi_account(minted.token_id.clone());
+    }));
+    assert!(result.is_err());
 }

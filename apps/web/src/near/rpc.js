@@ -58,3 +58,21 @@ export async function viewFunction(contractId, methodName, args = {}) {
 
   return decodeResult(result?.result);
 }
+
+export async function viewAccount(accountId) {
+  if (!accountId) throw new Error("Account ID is required");
+  return rpc("query", {
+    request_type: "view_account",
+    finality: "final",
+    account_id: accountId,
+  });
+}
+
+export async function viewAccessKeyList(accountId) {
+  if (!accountId) throw new Error("Account ID is required");
+  return rpc("query", {
+    request_type: "view_access_key_list",
+    finality: "final",
+    account_id: accountId,
+  });
+}

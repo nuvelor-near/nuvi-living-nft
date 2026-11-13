@@ -282,13 +282,18 @@ if (!state.mutation_count) {
   if (!previewBeforeMutation?.eligible) {
     throw new Error("Mutation should be eligible at XP >= 5");
   }
+  const provisioningDeposit = BigInt(
+    await view(LIVING_ID, "nuvi_account_creation_deposit"),
+  );
   await call({
     contractId: LIVING_ID,
     methodName: "mutate",
     args: { token_id: tokenId },
-    gasTgas: 90,
+    gasTgas: 220,
+    attachedDeposit: provisioningDeposit,
     evidence: {
       token_id: tokenId,
+      provisioning_deposit_yocto: provisioningDeposit.toString(),
       form_a_probability_bps: previewBeforeMutation.form_a_probability_bps,
       form_b_probability_bps: previewBeforeMutation.form_b_probability_bps,
     },

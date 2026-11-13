@@ -1,0 +1,39 @@
+{
+  "schema": "nuvi-smart-account-testnet-upgrade-v1",
+  "generated_at_utc": "2026-11-13T23:16:27.668Z",
+  "network_id": "testnet",
+  "rpc_url": "https://rpc.testnet.fastnear.com",
+  "source_branch": "feature/nuvi-nft-controlled-account-demo",
+  "living_nft_account_id": "nuvi-hack26.nvlborc70517034832.testnet",
+  "nuve_ft_account_id": "nuve-hack26.nvlborc70517034832.testnet",
+  "predecessor_living_wasm_sha256": "64d4a735a029ffcc75bcd70c5498bc317426df60d4b2f57afbf86d76871b3813",
+  "observed_living_wasm_sha256_before_run": "c76e557543d127b023f07d435211c19a8ed040967b7bb823ee27492952c91f91",
+  "target_living_wasm_sha256": "c76e557543d127b023f07d435211c19a8ed040967b7bb823ee27492952c91f91",
+  "upgrade_already_current_before_run": true,
+  "target_living_wasm_size_bytes": 880558,
+  "embedded_executor_sha256": "33ba2335814ecbbd94da66b4df5431e190cd3e2b70368a85deaea18081a8814c",
+  "nuve_storage_min_yocto": "1250000000000000000000",
+  "nuvi_account_creation_deposit_yocto": "1494040000000000000000000",
+  "expected_token_1_account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+  "token_1_owner_before": "player-hack26.nvlborc70517034832.testnet",
+  "token_1_form_before": "form_b",
+  "token_1_mutation_count_before": 1,
+  "post_upgrade_state_preserved": true,
+  "transactions": [
+    {
+      "step": "top_up_living",
+      "from": "nvlownrc70517034832.testnet",
+      "to": "nuvi-hack26.nvlborc70517034832.testnet",
+      "amount_yocto": "6344511369619400000000",
+      "tx_hash": "66ae6XmeF4GzySrYeMirzh1VXyCeayifAMCvt8vwuGGr"
+    }
+  ],
+  "deployment_tx_hash_recovered": false,
+  "deployment_proof": {
+    "method": "independent finality RPC readback after execute returned stale immediate result",
+    "live_living_wasm_sha256": "c76e557543d127b023f07d435211c19a8ed040967b7bb823ee27492952c91f91",
+    "live_living_wasm_size_bytes": 880558,
+    "live_storage_usage": 884298,
+    "state_preservation_verified": true
+  }
+}

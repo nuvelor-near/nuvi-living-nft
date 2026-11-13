@@ -1,0 +1,86 @@
+{
+  "schema": "nuvi-smart-account-testnet-e2e-v1",
+  "generated_at_utc": "2026-11-13T23:21:30.327Z",
+  "network_id": "testnet",
+  "rpc_url": "https://rpc.testnet.fastnear.com",
+  "token_id": "1",
+  "original_and_restored_owner": "player-hack26.nvlborc70517034832.testnet",
+  "second_owner": "nvlborc70517034832.testnet",
+  "child_account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+  "child_code_hash": "4UvQzEbhPVC7CZQwGFm3H6gPsGdUDkoe6H2Anyo5ndWb",
+  "child_access_key_count": 0,
+  "executor_config": {
+    "nft_contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+    "token_id": "1",
+    "nuve_ft_id": "nuve-hack26.nvlborc70517034832.testnet"
+  },
+  "nft_metadata_nuvi_account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+  "nft_metadata_status": "active",
+  "nuve_storage_registered": true,
+  "initial_child_nuve_balance_atomic": "1000000",
+  "final_child_nuve_balance_atomic": "980000",
+  "ownership_transfer_preserved_child_address": true,
+  "ownership_transfer_preserved_balance_before_new_owner_action": true,
+  "old_owner_rejected_after_transfer": true,
+  "new_owner_authorized_after_transfer": true,
+  "final_owner_restored": true,
+  "transactions": [
+    {
+      "step": "top_up_player",
+      "from": "nvlownrc70517034832.testnet",
+      "to": "player-hack26.nvlborc70517034832.testnet",
+      "amount_yocto": "250000000000000000000000",
+      "tx_hash": "8Duws7KQb375kCSBAPdvFQzPXZ1cVp3gbhxRrJkXDPJU"
+    },
+    {
+      "step": "provision_nuvi_account",
+      "caller": "player-hack26.nvlborc70517034832.testnet",
+      "token_id": "1",
+      "tx_hash": "3Z3wVSyhNj3ppZwVTPAQmcoasYiPfoA1rr2ga4uhobSK"
+    },
+    {
+      "step": "owner_send_before_nft_transfer",
+      "caller": "player-hack26.nvlborc70517034832.testnet",
+      "from": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+      "to": "player-hack26.nvlborc70517034832.testnet",
+      "amount_atomic": "10000",
+      "tx_hash": "FTGGJa57U1wezCyZbB46NTDwMJzToNEJegapHwkJYFj2"
+    },
+    {
+      "step": "transfer_nuvi_to_second_owner",
+      "from": "player-hack26.nvlborc70517034832.testnet",
+      "to": "nvlborc70517034832.testnet",
+      "token_id": "1",
+      "tx_hash": "4CZfsBUpCjAPx9CHzBxnDrm9EvaLn89Zp5A1KLy3jZvD"
+    },
+    {
+      "step": "new_owner_send_after_nft_transfer",
+      "caller": "nvlborc70517034832.testnet",
+      "from": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+      "to": "player-hack26.nvlborc70517034832.testnet",
+      "amount_atomic": "10000",
+      "tx_hash": "ABo5YcVmjqsCmMAui3oZhnQBBrQLexbQokkyiPkhcH3Z"
+    },
+    {
+      "step": "restore_nuvi_owner",
+      "from": "nvlborc70517034832.testnet",
+      "to": "player-hack26.nvlborc70517034832.testnet",
+      "token_id": "1",
+      "tx_hash": "Bms9z9jjvBrZ18bgH8HbDqeDZdbZutcJSfVzpWQ3fK9h"
+    }
+  ],
+  "rejected": [
+    {
+      "label": "non_owner_before_nft_transfer",
+      "rejected": true,
+      "tx_hash": "B1YDyDUovTkVswSoh6puEW1kTyyxNeBaeiFs1YnrmwEj",
+      "error": "{\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: panicked at src/lib.rs:104:9:\\nassertion `left == right` failed: Caller is not current owner of bound NUVI NFT\\n  left: AccountId(\\\"player-hack26.nvlborc70517034832.testnet\\\")\\n right: AccountId(\\\"nvlborc70517034832.testnet\\\")\"}}}}"
+    },
+    {
+      "label": "old_owner_after_nft_transfer",
+      "rejected": true,
+      "tx_hash": "EXe9EZHCKPDjhvyPRt81g3JanuEirFb4k3P46yZWsb8X",
+      "error": "{\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: panicked at src/lib.rs:104:9:\\nassertion `left == right` failed: Caller is not current owner of bound NUVI NFT\\n  left: AccountId(\\\"nvlborc70517034832.testnet\\\")\\n right: AccountId(\\\"player-hack26.nvlborc70517034832.testnet\\\")\"}}}}"
+    }
+  ]
+}

@@ -45,5 +45,19 @@
       "account_id": "treasury-hack26.nvlborc70517034832.testnet",
       "tx_hash": "CcHHV3DGYwQG7V9iLV1EyYYHMV4P6wW2Qca71igEbiA6"
     }
-  ]
+  ],
+  "media": {
+    "updated_at_utc": "2026-11-13T15:49:07.959649Z",
+    "base_uri": "https://nuvelor.gg/assets/hackathon/nuvi",
+    "token_id": "1",
+    "form_id": "form_b",
+    "verified_media": "https://nuvelor.gg/assets/hackathon/nuvi/form_b.png",
+    "tx_hash": "Fy2C3FZtSi4PuKBxfWUpd9kL1GGG6TPdb1wNdESq9fHz",
+    "receipt_id": "4WJ5Pee5Aq9yW8FTknSMsvSBJFjPXbnZozM7NAG7UdMi",
+    "readback_rpcs": [
+      "https://rpc.testnet.fastnear.com",
+      "https://rpc.testnet.near.org"
+    ],
+    "readback_finality": "final"
+  }
 }

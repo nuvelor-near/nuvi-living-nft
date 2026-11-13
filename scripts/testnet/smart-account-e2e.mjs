@@ -22,6 +22,19 @@ const deployment = JSON.parse(
 );
 const evidencePath = path.join(repoRoot, "deployments/smart-account-e2e-testnet.json");
 
+let priorProgress = null;
+try {
+  priorProgress = JSON.parse(await readFile(evidencePath, "utf8"));
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+const priorTransactions = Array.isArray(priorProgress?.transactions)
+  ? [...priorProgress.transactions]
+  : [];
+const priorRejected = Array.isArray(priorProgress?.rejected)
+  ? [...priorProgress.rejected]
+  : [];
+
 const LIVING_ID = deployment.living_nft_account_id;
 const NUVE_ID = deployment.nuve_ft_account_id;
 const PLAYER_ID = deployment.e2e_player_account_id;
@@ -134,8 +147,16 @@ const reader = player;
 
 const tokenBefore = await view(reader, LIVING_ID, "nft_token", { token_id: TOKEN_ID });
 if (!tokenBefore) throw new Error("NUVI token does not exist");
-if (tokenBefore.owner_id !== PLAYER_ID) {
-  throw new Error("Expected token owner " + PLAYER_ID + ", got " + tokenBefore.owner_id);
+const priorTransferOpen =
+  priorTransactions.some((item) => item.step === "transfer_nuvi_to_second_owner") &&
+  !priorTransactions.some((item) => item.step === "restore_nuvi_owner");
+if (
+  tokenBefore.owner_id !== PLAYER_ID &&
+  !(tokenBefore.owner_id === SECOND_OWNER_ID && priorTransferOpen)
+) {
+  throw new Error(
+    "Unexpected token owner for resumable E2E: " + tokenBefore.owner_id,
+  );
 }
 const livingBefore = await view(reader, LIVING_ID, "get_living_state", { token_id: TOKEN_ID });
 if (Number(livingBefore?.mutation_count || 0) < 1) {
@@ -165,11 +186,15 @@ console.log("expected_child=" + expectedChild);
 console.log("status_before=" + (statusBefore || "none"));
 console.log("provisioning_deposit_yocto=" + provisioningDeposit);
 console.log("player_top_up_yocto=" + topUp);
+console.log("resume_status=" + (priorProgress?.status || "none"));
 
 if (!EXECUTE) process.exit(0);
 
-const transactions = [];
-const rejected = [];
+const transactions = [...priorTransactions];
+const rejected = [...priorRejected];
+const hasStep = (step) => transactions.some((item) => item.step === step);
+const hasReject = (label) =>
+  rejected.some((item) => item.label === label && item.rejected);
 
 async function persistProgress(status, details = {}) {
   const snapshot = {
@@ -264,69 +289,120 @@ if (
 const childStorage = await view(reader, NUVE_ID, "storage_balance_of", { account_id: expectedChild });
 if (!childStorage) throw new Error("Child is not NUVE storage-registered");
 
-const initialChildBalance = BigInt(
-  await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
-);
+const readChildBalance = async () =>
+  BigInt(
+    await view(reader, NUVE_ID, "ft_balance_of", {
+      account_id: expectedChild,
+    }),
+  );
+const waitForChildBalance = (expected, label) =>
+  poll(
+    readChildBalance,
+    (value) => value === expected,
+    label,
+  );
+
+let currentChildBalance = await readChildBalance();
+const ownerSendAlreadyDone = hasStep("owner_send_before_nft_transfer");
+const newOwnerSendAlreadyDone = hasStep("new_owner_send_after_nft_transfer");
+const initialChildBalance =
+  currentChildBalance +
+  (ownerSendAlreadyDone ? NUVE_UNIT : 0n) +
+  (newOwnerSendAlreadyDone ? NUVE_UNIT : 0n);
 if (initialChildBalance < 2n * NUVE_UNIT) {
   throw new Error("Child NUVE balance is too small for two proof transfers");
 }
 
-const ownerSend = await call(player, {
-  contractId: expectedChild,
-  methodName: "request_ft_transfer",
-  args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
-  gasTgas: 120,
-});
-transactions.push({
-  step: "owner_send_before_nft_transfer",
-  caller: PLAYER_ID,
-  from: expectedChild,
-  to: PLAYER_ID,
-  amount_atomic: NUVE_UNIT.toString(),
-  tx_hash: txHash(ownerSend),
-});
-await persistProgress("OWNER_SEND_PASS");
-const afterOwnerSendBalance = BigInt(
-  await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
-);
-if (afterOwnerSendBalance !== initialChildBalance - NUVE_UNIT) {
-  throw new Error("Authorized owner transfer did not reduce child balance by 1 NUVE");
+let afterOwnerSendBalance;
+if (ownerSendAlreadyDone) {
+  afterOwnerSendBalance =
+    currentChildBalance + (newOwnerSendAlreadyDone ? NUVE_UNIT : 0n);
+} else {
+  const beforeOwnerSendBalance = currentChildBalance;
+  const ownerSend = await call(player, {
+    contractId: expectedChild,
+    methodName: "request_ft_transfer",
+    args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
+    gasTgas: 120,
+  });
+  transactions.push({
+    step: "owner_send_before_nft_transfer",
+    caller: PLAYER_ID,
+    from: expectedChild,
+    to: PLAYER_ID,
+    amount_atomic: NUVE_UNIT.toString(),
+    tx_hash: txHash(ownerSend),
+  });
+  await persistProgress("OWNER_SEND_SUBMITTED");
+  afterOwnerSendBalance = await waitForChildBalance(
+    beforeOwnerSendBalance - NUVE_UNIT,
+    "owner send balance readback",
+  );
+  currentChildBalance = afterOwnerSendBalance;
+  await persistProgress("OWNER_SEND_PASS", {
+    child_balance_atomic: afterOwnerSendBalance.toString(),
+  });
 }
 
-rejected.push(
-  await expectedFailure("non_owner_before_nft_transfer", () =>
-    call(secondOwner, {
-      contractId: expectedChild,
-      methodName: "request_ft_transfer",
-      args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
-      gasTgas: 120,
-    }),
-  ),
-);
+const ownerNow = await view(reader, LIVING_ID, "nft_token", {
+  token_id: TOKEN_ID,
+});
+if (
+  ownerNow?.owner_id === PLAYER_ID &&
+  !hasReject("non_owner_before_nft_transfer")
+) {
+  const rejection = await expectedFailure(
+    "non_owner_before_nft_transfer",
+    () =>
+      call(secondOwner, {
+        contractId: expectedChild,
+        methodName: "request_ft_transfer",
+        args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
+        gasTgas: 120,
+      }),
+  );
+  rejected.push(rejection);
+  await persistProgress("NON_OWNER_REJECT_PASS");
+}
 
 let transferredToSecondOwner = false;
+let balancePreservedAcrossOwnershipTransfer = false;
 try {
-  const transfer = await call(player, {
-    contractId: LIVING_ID,
-    methodName: "nft_transfer",
-    args: {
-      receiver_id: SECOND_OWNER_ID,
-      token_id: TOKEN_ID,
-      approval_id: null,
-      memo: "NUVI smart-account ownership-control proof",
-    },
-    gasTgas: 60,
-    attachedDeposit: 1n,
-  });
-  transferredToSecondOwner = true;
-  transactions.push({
-    step: "transfer_nuvi_to_second_owner",
-    from: PLAYER_ID,
-    to: SECOND_OWNER_ID,
+  let currentToken = await view(reader, LIVING_ID, "nft_token", {
     token_id: TOKEN_ID,
-    tx_hash: txHash(transfer),
   });
-  await persistProgress("NFT_TRANSFERRED_TO_SECOND_OWNER");
+  if (currentToken?.owner_id === SECOND_OWNER_ID) {
+    transferredToSecondOwner = true;
+  } else {
+    if (currentToken?.owner_id !== PLAYER_ID) {
+      throw new Error(
+        "Cannot continue ownership proof from owner " + currentToken?.owner_id,
+      );
+    }
+    const transfer = await call(player, {
+      contractId: LIVING_ID,
+      methodName: "nft_transfer",
+      args: {
+        receiver_id: SECOND_OWNER_ID,
+        token_id: TOKEN_ID,
+        approval_id: null,
+        memo: "NUVI smart-account ownership-control proof",
+      },
+      gasTgas: 60,
+      attachedDeposit: 1n,
+    });
+    transferredToSecondOwner = true;
+    if (!hasStep("transfer_nuvi_to_second_owner")) {
+      transactions.push({
+        step: "transfer_nuvi_to_second_owner",
+        from: PLAYER_ID,
+        to: SECOND_OWNER_ID,
+        token_id: TOKEN_ID,
+        tx_hash: txHash(transfer),
+      });
+    }
+    await persistProgress("NFT_TRANSFERRED_TO_SECOND_OWNER");
+  }
 
   const transferredToken = await poll(
     () => view(reader, LIVING_ID, "nft_token", { token_id: TOKEN_ID }),
@@ -337,49 +413,63 @@ try {
   if (transferredExtra.nuvi_account_id !== expectedChild) {
     throw new Error("NUVI Account metadata binding changed across NFT transfer");
   }
-  const balanceAfterOwnershipTransfer = BigInt(
-    await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
-  );
-  if (balanceAfterOwnershipTransfer !== afterOwnerSendBalance) {
-    throw new Error("Child balance changed merely because NFT ownership changed");
+
+  let balanceAfterOwnershipTransfer = await readChildBalance();
+  if (!hasStep("new_owner_send_after_nft_transfer")) {
+    if (balanceAfterOwnershipTransfer !== afterOwnerSendBalance) {
+      throw new Error(
+        "Child balance changed merely because NFT ownership changed",
+      );
+    }
+    balancePreservedAcrossOwnershipTransfer = true;
+  } else {
+    balancePreservedAcrossOwnershipTransfer =
+      balanceAfterOwnershipTransfer + NUVE_UNIT === afterOwnerSendBalance;
   }
 
-  rejected.push(
-    await expectedFailure("old_owner_after_nft_transfer", () =>
-      call(player, {
-        contractId: expectedChild,
-        methodName: "request_ft_transfer",
-        args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
-        gasTgas: 120,
-      }),
-    ),
-  );
+  if (!hasReject("old_owner_after_nft_transfer")) {
+    const rejection = await expectedFailure(
+      "old_owner_after_nft_transfer",
+      () =>
+        call(player, {
+          contractId: expectedChild,
+          methodName: "request_ft_transfer",
+          args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
+          gasTgas: 120,
+        }),
+    );
+    rejected.push(rejection);
+    await persistProgress("OLD_OWNER_REJECT_PASS");
+  }
 
-  const newOwnerSend = await call(secondOwner, {
-    contractId: expectedChild,
-    methodName: "request_ft_transfer",
-    args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
-    gasTgas: 120,
-  });
-  transactions.push({
-    step: "new_owner_send_after_nft_transfer",
-    caller: SECOND_OWNER_ID,
-    from: expectedChild,
-    to: PLAYER_ID,
-    amount_atomic: NUVE_UNIT.toString(),
-    tx_hash: txHash(newOwnerSend),
-  });
-  await persistProgress("NEW_OWNER_SEND_PASS");
-
-  const afterNewOwnerSendBalance = BigInt(
-    await view(reader, NUVE_ID, "ft_balance_of", { account_id: expectedChild }),
-  );
-  if (afterNewOwnerSendBalance !== balanceAfterOwnershipTransfer - NUVE_UNIT) {
-    throw new Error("New owner transfer did not reduce child balance by 1 NUVE");
+  if (!hasStep("new_owner_send_after_nft_transfer")) {
+    const beforeNewOwnerSendBalance = await readChildBalance();
+    const newOwnerSend = await call(secondOwner, {
+      contractId: expectedChild,
+      methodName: "request_ft_transfer",
+      args: { receiver_id: PLAYER_ID, amount: NUVE_UNIT.toString() },
+      gasTgas: 120,
+    });
+    transactions.push({
+      step: "new_owner_send_after_nft_transfer",
+      caller: SECOND_OWNER_ID,
+      from: expectedChild,
+      to: PLAYER_ID,
+      amount_atomic: NUVE_UNIT.toString(),
+      tx_hash: txHash(newOwnerSend),
+    });
+    await persistProgress("NEW_OWNER_SEND_SUBMITTED");
+    await waitForChildBalance(
+      beforeNewOwnerSendBalance - NUVE_UNIT,
+      "new owner send balance readback",
+    );
+    await persistProgress("NEW_OWNER_SEND_PASS");
   }
 } finally {
   if (transferredToSecondOwner) {
-    const current = await view(reader, LIVING_ID, "nft_token", { token_id: TOKEN_ID });
+    const current = await view(reader, LIVING_ID, "nft_token", {
+      token_id: TOKEN_ID,
+    });
     if (current?.owner_id === SECOND_OWNER_ID) {
       const restore = await call(secondOwner, {
         contractId: LIVING_ID,
@@ -393,13 +483,15 @@ try {
         gasTgas: 60,
         attachedDeposit: 1n,
       });
-      transactions.push({
-        step: "restore_nuvi_owner",
-        from: SECOND_OWNER_ID,
-        to: PLAYER_ID,
-        token_id: TOKEN_ID,
-        tx_hash: txHash(restore),
-      });
+      if (!hasStep("restore_nuvi_owner")) {
+        transactions.push({
+          step: "restore_nuvi_owner",
+          from: SECOND_OWNER_ID,
+          to: PLAYER_ID,
+          token_id: TOKEN_ID,
+          tx_hash: txHash(restore),
+        });
+      }
       await persistProgress("OWNER_RESTORED");
     }
   }
@@ -435,7 +527,8 @@ const evidence = {
   initial_child_nuve_balance_atomic: initialChildBalance.toString(),
   final_child_nuve_balance_atomic: String(finalChildBalance),
   ownership_transfer_preserved_child_address: true,
-  ownership_transfer_preserved_balance_before_new_owner_action: true,
+  ownership_transfer_preserved_balance_before_new_owner_action:
+    balancePreservedAcrossOwnershipTransfer,
   old_owner_rejected_after_transfer: rejected.some(
     (item) => item.label === "old_owner_after_nft_transfer" && item.rejected,
   ),

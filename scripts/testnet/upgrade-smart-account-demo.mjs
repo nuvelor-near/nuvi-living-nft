@@ -84,6 +84,18 @@ async function waitForAccountAmount(provider, accountId, minimum, timeoutMs = 30
       minimum,
   );
 }
+async function waitForCodeSha(provider, accountId, expected, timeoutMs = 45_000) {
+  const started = Date.now();
+  let last = "";
+  while (Date.now() - started < timeoutMs) {
+    last = await codeSha(provider, accountId);
+    if (last === expected) return last;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    "Living WASM readback stayed at " + last + "; expected " + expected,
+  );
+}
 
 const keyStore = new keyStores.InMemoryKeyStore();
 const livingCredential = await loadCredential(LIVING_ID);
@@ -178,10 +190,11 @@ if (currentLivingSha !== targetLivingSha) {
   });
 }
 
-const readbackSha = await codeSha(provider, LIVING_ID);
-if (readbackSha !== targetLivingSha) {
-  throw new Error("Living WASM readback mismatch: " + readbackSha);
-}
+const readbackSha = await waitForCodeSha(
+  provider,
+  LIVING_ID,
+  targetLivingSha,
+);
 
 const afterConfig = await view(living, LIVING_ID, "get_living_game_config");
 const afterSupply = await view(living, LIVING_ID, "nft_total_supply");
@@ -211,8 +224,10 @@ const evidence = {
   source_branch: "feature/nuvi-nft-controlled-account-demo",
   living_nft_account_id: LIVING_ID,
   nuve_ft_account_id: NUVE_ID,
-  previous_living_wasm_sha256: currentLivingSha,
+  predecessor_living_wasm_sha256: PREVIOUS_LIVING_SHA,
+  observed_living_wasm_sha256_before_run: currentLivingSha,
   target_living_wasm_sha256: targetLivingSha,
+  upgrade_already_current_before_run: currentLivingSha === targetLivingSha,
   target_living_wasm_size_bytes: livingWasm.length,
   embedded_executor_sha256: embeddedExecutorSha,
   nuve_storage_min_yocto: storageMinimum.toString(),

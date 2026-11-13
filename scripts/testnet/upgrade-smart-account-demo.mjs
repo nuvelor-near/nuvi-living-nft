@@ -69,6 +69,21 @@ async function codeSha(provider, accountId) {
 async function view(account, contractId, methodName, args = {}) {
   return account.viewFunction({ contractId, methodName, args, blockQuery: { finality: "final" } });
 }
+async function waitForAccountAmount(provider, accountId, minimum, timeoutMs = 30_000) {
+  const started = Date.now();
+  let last = null;
+  while (Date.now() - started < timeoutMs) {
+    last = await accountState(provider, accountId);
+    if (BigInt(last.amount) >= minimum) return last;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    "Account amount readback stayed below required floor: " +
+      (last?.amount || "unknown") +
+      " < " +
+      minimum,
+  );
+}
 
 const keyStore = new keyStores.InMemoryKeyStore();
 const livingCredential = await loadCredential(LIVING_ID);
@@ -146,10 +161,11 @@ if (topUp > 0n) {
     amount_yocto: topUp.toString(),
     tx_hash: txHash(outcome),
   });
-  const fundedState = await accountState(provider, LIVING_ID);
-  if (BigInt(fundedState.amount) < projectedRequiredAmount) {
-    throw new Error("Living top-up readback is below projected release floor");
-  }
+  await waitForAccountAmount(
+    provider,
+    LIVING_ID,
+    projectedRequiredAmount,
+  );
 }
 
 if (currentLivingSha !== targetLivingSha) {

@@ -35,6 +35,12 @@ function shortId(value, head = 12, tail = 8) {
   return value.slice(0, head) + "…" + value.slice(-tail);
 }
 
+function formatCompactNuve(value) {
+  const formatted = formatNuve(value);
+  if (!formatted.includes(".")) return formatted;
+  return formatted.replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function formLabel(formId, t) {
   if (formId === "form_a") return t.formA;
   if (formId === "form_b") return t.formB;
@@ -442,9 +448,9 @@ export default function DemoApp({ locale = "en" }) {
                   onClick={() => void chooseWork("work_a")}
                 >
                   <span className="nuvi-demo-pill blue" aria-hidden="true"><i /></span>
-                  <span className="nuvi-demo-choice-copy">{t.workAChoice}</span>
-                  <small className="nuvi-demo-choice-action">
-                    {t.tapToChoose} · {formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
+                  <span className="nuvi-demo-choice-action">{t.tapToChoose}</span>
+                  <small className="nuvi-demo-choice-cost">
+                    {formatCompactNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
                   </small>
                 </button>
                 <button
@@ -454,9 +460,9 @@ export default function DemoApp({ locale = "en" }) {
                   onClick={() => void chooseWork("work_b")}
                 >
                   <span className="nuvi-demo-pill red" aria-hidden="true"><i /></span>
-                  <span className="nuvi-demo-choice-copy">{t.workBChoice}</span>
-                  <small className="nuvi-demo-choice-action">
-                    {t.tapToChoose} · {formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
+                  <span className="nuvi-demo-choice-action">{t.tapToChoose}</span>
+                  <small className="nuvi-demo-choice-cost">
+                    {formatCompactNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
                   </small>
                 </button>
               </div>

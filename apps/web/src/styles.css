@@ -153,11 +153,11 @@ button,a{font:inherit}
 .nuvi-demo-pill i{
   position:absolute;inset:3px 12px auto 12px;height:22%;border-radius:999px;background:rgba(255,255,255,.5);filter:blur(.3px)
 }
-.nuvi-demo-choice-copy{
-  display:block;color:#b8c4d9;font-size:clamp(8.5px,1.2dvh,10.5px);line-height:1.25;font-weight:700
-}
 .nuvi-demo-choice-action{
-  display:block;color:#edf3ff!important;font-size:clamp(8px,1.15dvh,10px)!important;font-weight:900;letter-spacing:.015em
+  display:block;color:#edf3ff!important;font-size:clamp(10px,1.55dvh,13px)!important;line-height:1.15;font-weight:900;letter-spacing:.01em
+}
+.nuvi-demo-choice-cost{
+  display:block;color:#edf3ff!important;font-size:clamp(10px,1.55dvh,13px)!important;line-height:1.15;font-weight:900
 }
 @keyframes nuvi-choice-nudge-a{
   0%,100%{transform:translateX(0) rotate(0)}
@@ -226,7 +226,6 @@ button,a{font:inherit}
 @media(max-height:540px){
   .nuvi-demo-visual-meta{display:none}
   .nuvi-demo-screen p{line-height:1.25}
-  .nuvi-demo-choice-copy{font-size:8px}
   .nuvi-demo-progress{margin:5px 0 4px}
 }
 @media(prefers-reduced-motion:reduce){

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { accountExplorerUrl, contractsConfigured, txExplorerUrl } from "./config";
 import { useWalletConnect } from "./wallet/WalletConnectContext";
 import {
@@ -110,6 +110,8 @@ export default function DemoApp({ locale = "en" }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [proofTxHash, setProofTxHash] = useState("");
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const walletMenuRef = useRef(null);
 
   const refresh = useCallback(
     async (preferredTokenId = "") => {
@@ -168,8 +170,34 @@ export default function DemoApp({ locale = "en" }) {
     return () => window.clearInterval(id);
   }, [refresh, selectedTokenId, tokenState?.nuviAccount?.status]);
 
+  useEffect(() => {
+    if (!walletMenuOpen) return undefined;
+
+    function closeOnOutsidePointer(event) {
+      if (walletMenuRef.current && !walletMenuRef.current.contains(event.target)) {
+        setWalletMenuOpen(false);
+      }
+    }
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setWalletMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [walletMenuOpen]);
+
+  useEffect(() => {
+    if (!accountId) setWalletMenuOpen(false);
+  }, [accountId]);
+
   async function handleDisconnect() {
     if (busy) return;
+    setWalletMenuOpen(false);
     setBusy("disconnect");
     setError("");
     setNotice("");
@@ -304,9 +332,31 @@ export default function DemoApp({ locale = "en" }) {
             {t.stepLabel} {currentStep}/{PHASES.length}
           </span>
           {accountId ? (
-            <ExternalLink href={accountExplorerUrl(accountId)} className="nuvi-demo-wallet connected">
-              {shortId(accountId, 10, 6)}
-            </ExternalLink>
+            <div className="nuvi-demo-wallet-menu" ref={walletMenuRef}>
+              <button
+                type="button"
+                className="nuvi-demo-wallet connected"
+                aria-haspopup="menu"
+                aria-expanded={walletMenuOpen}
+                onClick={() => setWalletMenuOpen((open) => !open)}
+              >
+                {shortId(accountId, 10, 6)}
+              </button>
+              {walletMenuOpen && (
+                <div className="nuvi-demo-wallet-dropdown" role="menu">
+                  <button
+                    type="button"
+                    className="nuvi-demo-wallet-disconnect"
+                    role="menuitem"
+                    disabled={busy === "disconnect"}
+                    onClick={() => void handleDisconnect()}
+                  >
+                    <span aria-hidden="true">↪</span>
+                    {busy === "disconnect" ? t.disconnecting : t.disconnect}
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <span className="nuvi-demo-wallet">{t.testnet}</span>
           )}

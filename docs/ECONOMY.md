@@ -8,9 +8,11 @@
 | Feed duration | 30 sec |
 | Feed reward | 1 NUVE |
 | Work cost | 10 NUVE |
-| Work duration | 10 sec |
+| Work completion | immediate after successful Treasury/Burn routing in the signed Work flow |
 | Work reward | 1 XP |
-| Mutation threshold | 5 XP |
+| Mutation threshold | 1 completed Work cycle / 1 XP (Hackathon demo) |
+
+The Hackathon demo intentionally sets `WORK_CYCLES_PER_MUTATION = 1` so a judge can observe the full evolution path in one session. The production/gameplay cycle count is **not** fixed by this demo and will be reviewed against the final game economy.
 
 Each paid action supports:
 

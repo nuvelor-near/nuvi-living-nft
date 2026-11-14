@@ -24,8 +24,8 @@ import VerifiedProof from "./VerifiedProof";
 
 const ACTIONS = [
   { id: "feed", label: "Feed", detail: "30 sec · reward 1 NUVE" },
-  { id: "work_a", label: "Work A", detail: "10 sec · +1 XP / A affinity" },
-  { id: "work_b", label: "Work B", detail: "10 sec · +1 XP / B affinity" },
+  { id: "work_a", label: "Work A", detail: "instant · +1 XP / A affinity" },
+  { id: "work_b", label: "Work B", detail: "instant · +1 XP / B affinity" },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -621,7 +621,7 @@ export default function App() {
                           ? "MVP mutation complete"
                           : mutation?.eligible
                             ? "Mutate NUVI"
-                            : "Reach 5 XP to mutate"}
+                            : `Complete ${mutation?.threshold_xp ?? 1} Work cycle${(mutation?.threshold_xp ?? 1) === 1 ? "" : "s"} to mutate`}
                       </button>
                     </article>
 

@@ -6,29 +6,22 @@ This layer completes the first playable Feed / Work loop after a paid action has
 
 ## Completion rules
 
-Only the current NFT owner may call `complete_living_action(token_id)`.
+### Work A / Work B
 
-The action must exist and the NEAR block timestamp must be greater than or equal to `ready_at_ns`.
+For the Hackathon demo, Work is a **one-signature user flow**.
 
-### Work A
+The user signs the existing NUVE `ft_transfer_call`. After the selected Treasury/Burn route succeeds, the Living NFT callback immediately:
 
-On successful completion:
+- awards `xp += 1`;
+- increments the matching `work_a_xp` or `work_b_xp`;
+- keeps `active_action = none`;
+- keeps `ready_at_ns = 0`.
 
-- `xp += 1`;
-- `work_a_xp += 1`;
-- `active_action = none`;
-- `ready_at_ns = 0`.
-
-### Work B
-
-On successful completion:
-
-- `xp += 1`;
-- `work_b_xp += 1`;
-- `active_action = none`;
-- `ready_at_ns = 0`.
+There is no second `complete_living_action` signature for newly started Work. The legacy Work branch in `complete_living_action` remains for upgrade compatibility with a Work action that may already have been active before the contract upgrade.
 
 ### Feed
+
+Only the current NFT owner may complete a ready Feed with `complete_living_action(token_id)`. The NEAR block timestamp must be greater than or equal to `ready_at_ns`.
 
 A ready Feed does not clear immediately.
 
@@ -59,7 +52,7 @@ The lock ends when the action completes.
 This implementation follows `docs/ECONOMY.md`:
 
 - Feed reward: 1 NUVE;
-- Work reward: 1 XP.
+- Work reward: 1 XP, settled immediately after successful Treasury/Burn routing.
 
 The prior NUVE FT documentation line that called 1 NUVE a Work reward was corrected because it conflicted with the existing economy table.
 

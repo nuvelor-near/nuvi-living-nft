@@ -1701,7 +1701,9 @@ fn living_game_config_exposes_demo_economy() {
     assert_eq!(config.feed_cost, U128(5 * NUVE_UNIT));
     assert_eq!(config.work_cost, U128(10 * NUVE_UNIT));
     assert_eq!(config.feed_duration_ns, 30_000_000_000);
-    assert_eq!(config.work_duration_ns, 10_000_000_000);
+    assert_eq!(config.work_duration_ns, 0);
+    assert_eq!(config.mutation_threshold_xp, WORK_CYCLES_PER_MUTATION);
+    assert_eq!(WORK_CYCLES_PER_MUTATION, 1);
 }
 
 #[test]
@@ -1927,66 +1929,55 @@ fn start_paid_living_action(
 }
 
 #[test]
-fn ready_work_a_completion_awards_one_xp_and_clears_timer() {
+fn work_a_payment_awards_xp_immediately_after_route_success() {
     let mut contract = contract();
     let minted = mint(&mut contract, "Worker A", "alice.near");
     let token_id = minted.token_id;
 
-    let started_at = 5_000_000_000_000;
     start_paid_living_action(
         &mut contract,
         &token_id,
         "alice.near",
         LivingActionKind::WorkA,
         EconomicRoute::Sponsor,
-        started_at,
+        5_000_000_000_000,
     );
 
-    let ready_at = contract
-        .get_living_state(token_id.clone())
-        .unwrap()
-        .ready_at_ns;
-    assert_eq!(ready_at, started_at + WORK_DURATION_NS);
-
-    context_at("alice.near", 0, ready_at);
-    let result = contract.complete_living_action(token_id.clone());
-    assert!(matches!(result, near_sdk::PromiseOrValue::Value(true)));
-
-    let state = contract.get_living_state(token_id).unwrap();
+    let state = contract.get_living_state(token_id.clone()).unwrap();
     assert_eq!(state.xp, 1);
     assert_eq!(state.work_a_xp, 1);
     assert_eq!(state.work_b_xp, 0);
     assert_eq!(state.active_action, None);
     assert_eq!(state.ready_at_ns, 0);
+    assert_eq!(state.sponsor_spent, U128(WORK_COST_ATOMIC));
+
+    let preview = contract.get_mutation_preview(token_id).unwrap();
+    assert!(preview.eligible);
+    assert_eq!(preview.xp, WORK_CYCLES_PER_MUTATION);
+    assert_eq!(preview.threshold_xp, WORK_CYCLES_PER_MUTATION);
 }
 
 #[test]
-fn ready_work_b_completion_updates_work_b_affinity() {
+fn work_b_payment_awards_xp_immediately_after_route_success() {
     let mut contract = contract();
     let minted = mint(&mut contract, "Worker B", "alice.near");
     let token_id = minted.token_id;
 
-    let started_at = 6_000_000_000_000;
     start_paid_living_action(
         &mut contract,
         &token_id,
         "alice.near",
         LivingActionKind::WorkB,
         EconomicRoute::Burn,
-        started_at,
+        6_000_000_000_000,
     );
-
-    let ready_at = started_at + WORK_DURATION_NS;
-    context_at("alice.near", 0, ready_at);
-    assert!(matches!(
-        contract.complete_living_action(token_id.clone()),
-        near_sdk::PromiseOrValue::Value(true)
-    ));
 
     let state = contract.get_living_state(token_id).unwrap();
     assert_eq!(state.xp, 1);
     assert_eq!(state.work_a_xp, 0);
     assert_eq!(state.work_b_xp, 1);
+    assert_eq!(state.active_action, None);
+    assert_eq!(state.ready_at_ns, 0);
     assert_eq!(state.burner_spent, U128(WORK_COST_ATOMIC));
 }
 
@@ -2065,7 +2056,7 @@ fn failed_feed_reward_keeps_ready_action_retryable() {
 }
 
 #[test]
-fn action_completion_rejects_early_or_non_owner() {
+fn feed_completion_rejects_early_or_non_owner() {
     let mut contract = contract();
     let minted = mint(&mut contract, "Guarded completion", "alice.near");
     let token_id = minted.token_id;
@@ -2075,11 +2066,11 @@ fn action_completion_rejects_early_or_non_owner() {
         &mut contract,
         &token_id,
         "alice.near",
-        LivingActionKind::WorkA,
+        LivingActionKind::Feed,
         EconomicRoute::Sponsor,
         started_at,
     );
-    let ready_at = started_at + WORK_DURATION_NS;
+    let ready_at = started_at + FEED_DURATION_NS;
 
     context_at("alice.near", 0, ready_at - 1);
     let early = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2095,7 +2086,7 @@ fn action_completion_rejects_early_or_non_owner() {
 
     let state = contract.get_living_state(token_id).unwrap();
     assert_eq!(state.xp, 0);
-    assert_eq!(state.active_action, Some(LivingActionKind::WorkA));
+    assert_eq!(state.active_action, Some(LivingActionKind::Feed));
 }
 
 #[test]
@@ -2108,7 +2099,7 @@ fn active_living_action_locks_transfer_and_burn() {
         &mut contract,
         &token_id,
         "alice.near",
-        LivingActionKind::WorkB,
+        LivingActionKind::Feed,
         EconomicRoute::Sponsor,
         10_000_000_000_000,
     );
@@ -2131,7 +2122,7 @@ fn active_living_action_locks_transfer_and_burn() {
     );
     assert_eq!(
         contract.get_living_state(token_id).unwrap().active_action,
-        Some(LivingActionKind::WorkB)
+        Some(LivingActionKind::Feed)
     );
 }
 
@@ -2165,7 +2156,7 @@ fn mutation_preview_uses_work_and_behavior_weights_on_chain() {
     assert!(preview.eligible);
     assert_eq!(preview.current_form_id, BASIC_FORM_ID);
     assert_eq!(preview.mutation_stage, 0);
-    assert_eq!(preview.threshold_xp, 5);
+    assert_eq!(preview.threshold_xp, WORK_CYCLES_PER_MUTATION);
     assert_eq!(preview.sponsor_level, 2);
     assert_eq!(preview.burner_level, 3);
     assert_eq!(preview.form_a_weight, 80);
@@ -2248,7 +2239,7 @@ fn mutation_requires_threshold_owner_and_unlocked_state() {
         &mut contract,
         &token_id,
         "alice.near",
-        LivingActionKind::WorkA,
+        LivingActionKind::Feed,
         EconomicRoute::Sponsor,
         30_000_000_000_000,
     );
@@ -2469,10 +2460,11 @@ fn migrate_v5_to_v7_preserves_game_state_and_initializes_global_alignment() {
     assert_eq!(migrated.state_version, STATE_VERSION_V7);
     assert_eq!(migrated.nuve_ft_id, nuve_ft_id());
     assert_eq!(migrated.treasury_id, treasury_id());
-    assert_eq!(
-        migrated.get_living_state(token_id).unwrap().active_action,
-        Some(LivingActionKind::WorkA)
-    );
+    let migrated_state = migrated.get_living_state(token_id).unwrap();
+    assert_eq!(migrated_state.active_action, None);
+    assert_eq!(migrated_state.ready_at_ns, 0);
+    assert_eq!(migrated_state.xp, 1);
+    assert_eq!(migrated_state.work_a_xp, 1);
     assert_eq!(migrated.global_treasury_total, 0);
     assert_eq!(migrated.global_burn_total, 0);
     assert_eq!(migrated.get_global_alignment().global_total, U128(0));

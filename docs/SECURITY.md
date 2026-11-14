@@ -51,9 +51,10 @@ Implemented:
 
 Implemented:
 
-- only the current NFT owner may complete an action;
-- completion before `ready_at_ns` is rejected;
-- Work A/B completion mutates XP synchronously;
+- newly started Work A/B resolves inside the successful NUVE routing callback, so XP/affinity is awarded without a second user signature;
+- legacy `complete_living_action` Work handling remains for upgrade compatibility with previously active Work state;
+- only the current NFT owner may complete a timed Feed;
+- Feed completion before `ready_at_ns` is rejected;
 - Feed keeps its action lock until the NUVE reward call succeeds;
 - Feed reward IDs are deterministic from `token_id + ready_at_ns`, so a retry cannot mint twice;
 - failed Feed reward calls leave the ready action retryable;
@@ -64,7 +65,7 @@ Implemented:
 Implemented:
 
 - only the current NFT owner may mutate;
-- mutation requires 5 XP, Basic form, no active action and no pending settlement;
+- Hackathon mutation requires one completed Work cycle / 1 XP, Basic form, no active action and no pending settlement; the production cycle count remains an economy parameter to be reviewed;
 - probability preview is calculated on-chain;
 - one MVP mutation only;
 - `token_id` is preserved;

@@ -10,9 +10,11 @@ The NFT is eligible when all conditions hold:
 
 - current `form_id = basic`;
 - `mutation_count = 0`;
-- `xp >= 5`;
+- `xp >= WORK_CYCLES_PER_MUTATION`; the Hackathon demo sets `WORK_CYCLES_PER_MUTATION = 1`;
 - no active Feed/Work action;
 - no pending NUVE settlement.
+
+The one-cycle threshold is a demo acceleration, not a frozen production economy rule. The production/gameplay cycle count will be reviewed against the concrete economy before release.
 
 Only the current NFT owner may execute `mutate(token_id)`.
 

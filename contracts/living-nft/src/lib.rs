@@ -1534,25 +1534,76 @@ impl Contract {
             }
         }
 
-        state.active_action = Some(pending.action);
-        state.ready_at_ns =
-            env::block_timestamp().saturating_add(action_duration_ns(pending.action));
+        match pending.action {
+            LivingActionKind::Feed => {
+                state.active_action = Some(LivingActionKind::Feed);
+                state.ready_at_ns = env::block_timestamp()
+                    .saturating_add(action_duration_ns(LivingActionKind::Feed));
 
-        self.living_state_by_id.insert(&token_id, &state);
-        self.pending_living_payment_by_token.remove(&token_id);
+                self.living_state_by_id.insert(&token_id, &state);
+                self.pending_living_payment_by_token.remove(&token_id);
 
-        events::log_event(
-            "living_action_started",
-            serde_json::json!({
-                "token_id": token_id,
-                "settlement_id": settlement_id,
-                "payer_id": pending.payer_id,
-                "action": pending.action,
-                "route": pending.route,
-                "amount": amount,
-                "ready_at_ns": state.ready_at_ns,
-            }),
-        );
+                events::log_event(
+                    "living_action_started",
+                    serde_json::json!({
+                        "token_id": token_id,
+                        "settlement_id": settlement_id,
+                        "payer_id": pending.payer_id.clone(),
+                        "action": pending.action,
+                        "route": pending.route,
+                        "amount": amount,
+                        "ready_at_ns": state.ready_at_ns,
+                        "immediate_completion": false,
+                    }),
+                );
+            }
+            LivingActionKind::WorkA | LivingActionKind::WorkB => {
+                state.xp = state.xp.checked_add(1).expect("XP overflow");
+                match pending.action {
+                    LivingActionKind::WorkA => {
+                        state.work_a_xp =
+                            state.work_a_xp.checked_add(1).expect("Work A XP overflow");
+                    }
+                    LivingActionKind::WorkB => {
+                        state.work_b_xp =
+                            state.work_b_xp.checked_add(1).expect("Work B XP overflow");
+                    }
+                    LivingActionKind::Feed => unreachable!(),
+                }
+                state.active_action = None;
+                state.ready_at_ns = 0;
+
+                self.living_state_by_id.insert(&token_id, &state);
+                self.pending_living_payment_by_token.remove(&token_id);
+
+                events::log_event(
+                    "living_action_started",
+                    serde_json::json!({
+                        "token_id": token_id,
+                        "settlement_id": settlement_id,
+                        "payer_id": pending.payer_id.clone(),
+                        "action": pending.action,
+                        "route": pending.route,
+                        "amount": amount,
+                        "ready_at_ns": 0,
+                        "immediate_completion": true,
+                    }),
+                );
+                events::log_event(
+                    "living_action_completed",
+                    serde_json::json!({
+                        "token_id": token_id,
+                        "settlement_id": settlement_id,
+                        "owner_id": pending.payer_id,
+                        "action": pending.action,
+                        "xp": state.xp,
+                        "work_a_xp": state.work_a_xp,
+                        "work_b_xp": state.work_b_xp,
+                        "immediate_completion": true,
+                    }),
+                );
+            }
+        }
 
         U128(0)
     }

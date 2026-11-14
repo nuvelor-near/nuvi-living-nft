@@ -11,9 +11,15 @@ pub const FEED_COST_ATOMIC: u128 = 5 * NUVE_UNIT;
 pub const WORK_COST_ATOMIC: u128 = 10 * NUVE_UNIT;
 
 pub const FEED_DURATION_NS: u64 = 30_000_000_000;
-pub const WORK_DURATION_NS: u64 = 10_000_000_000;
+/// Hackathon demo Work resolves in the same signed transaction flow after
+/// successful NUVE routing, so there is no separate completion delay.
+pub const WORK_DURATION_NS: u64 = 0;
 
-pub const MUTATION_THRESHOLD_XP: u64 = 5;
+/// Hackathon demo acceleration. Production/gameplay cycle count will be
+/// versioned later against the actual game economy.
+pub const WORK_CYCLES_PER_MUTATION: u64 = 1;
+/// Backward-compatible API name: one completed Work cycle awards one XP.
+pub const MUTATION_THRESHOLD_XP: u64 = WORK_CYCLES_PER_MUTATION;
 pub const BASIC_FORM_ID: &str = "basic";
 pub const FORM_A_ID: &str = "form_a";
 pub const FORM_B_ID: &str = "form_b";

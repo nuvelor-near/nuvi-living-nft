@@ -56,11 +56,11 @@ Implemented and accepted on Testnet:
 - LivingState foundation for persistent player-shaped NFT identity;
 - isolated NUVE demo FT with one-time starter claim and bounded idempotent game rewards;
 - Living Settlement V1:
-  `ft_transfer_call → Sponsor/Burn route → callback → Feed/Work timer`;
+  `ft_transfer_call → Sponsor/Burn route → callback`; Feed starts its timer, while Work A/B resolve in the same signed flow;
 - Living Actions V1:
-  Work A/B award XP and affinity; Feed mints a retry-safe 1 NUVE reward;
+  one Work A/B signature routes NUVE and immediately awards XP + affinity; Feed keeps its timer and mints a retry-safe 1 NUVE reward on completion;
 - Mutation V1:
-  at 5 XP the current owner gets an on-chain Form A/Form B probability preview and may perform the single MVP mutation without changing `token_id`;
+  the Hackathon demo uses `WORK_CYCLES_PER_MUTATION = 1`; after one completed Work cycle the current owner gets an on-chain Form A/Form B probability preview and may perform the single MVP mutation without changing `token_id`. The production cycle count is intentionally deferred to the final game economy;
 - Global Alignment Base:
   successful Treasury/Burn routes accumulate global NUVE totals and canonical basis-point shares;
 - Starter NUVI / contract state V7:

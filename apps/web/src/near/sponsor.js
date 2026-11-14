@@ -1,7 +1,7 @@
 import { appConfig } from "../config";
 import { viewAccount } from "./rpc";
 
-export const DEMO_FUNDING_TARGET_YOCTO = 2_000_000_000_000_000_000_000_000n;
+export const DEMO_FUNDING_TARGET_YOCTO = 1_000_000_000_000_000_000_000_000n;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -56,7 +56,7 @@ export async function requestDemoFunding(accountId) {
 
   if (!funding.ready) {
     throw new Error(
-      "Sponsor transaction was submitted, but the 2.0 NEAR balance is not final yet. Retry in a few seconds.",
+      "Sponsor transaction was submitted, but the 1.0 NEAR balance is not final yet. Retry in a few seconds.",
     );
   }
 

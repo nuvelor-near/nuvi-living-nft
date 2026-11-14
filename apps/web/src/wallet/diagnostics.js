@@ -206,10 +206,14 @@ export function primeMeteorWebWindow(walletId, label) {
 
   try {
     panel.document.title = "NUVELOR · Testnet signature";
+    panel.document.head.innerHTML =
+      '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><style>@keyframes nuviSigSpin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.nuvi-sig-spinner{animation:none!important}}</style>';
+    panel.document.documentElement.style.cssText =
+      "margin:0;min-height:100%;background:#0a101b;color:#f3f7ff;";
     panel.document.body.style.cssText =
-      "margin:0;min-height:100vh;display:grid;place-items:center;background:#0e1623;color:#e8f0fb;font-family:system-ui,sans-serif;";
+      "margin:0;min-height:100dvh;display:grid;place-items:center;padding:max(20px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));background:radial-gradient(circle at 50% 24%,rgba(73,149,255,.15),transparent 34%),#0a101b;color:#f3f7ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;";
     panel.document.body.innerHTML =
-      '<div style="padding:28px;text-align:center;max-width:320px"><div style="font-size:12px;letter-spacing:.14em;color:#5dd6f5;text-transform:uppercase">NUVELOR · NEAR Testnet</div><h2 style="margin:14px 0 8px">Preparing signature…</h2><p style="margin:0;color:#b6c4d8;line-height:1.5">Meteor Web will open here for transaction approval.</p></div>';
+      '<main style="box-sizing:border-box;width:min(100%,420px);padding:clamp(22px,7vw,34px);border:1px solid rgba(111,156,218,.28);border-radius:24px;background:linear-gradient(160deg,rgba(24,35,55,.94),rgba(11,17,28,.97));box-shadow:0 24px 70px rgba(0,0,0,.34);text-align:center"><div style="font-size:12px;letter-spacing:.14em;color:#70ddf6;text-transform:uppercase;font-weight:850">NUVELOR · NEAR TESTNET</div><div class="nuvi-sig-spinner" style="box-sizing:border-box;width:48px;height:48px;margin:24px auto 20px;border-radius:50%;border:3px solid rgba(125,153,196,.23);border-top-color:#65ddf7;animation:nuviSigSpin .8s linear infinite"></div><h1 style="margin:0 0 12px;font-size:clamp(25px,7vw,34px);line-height:1.08;letter-spacing:-.03em">Preparing signature…</h1><p style="margin:0 auto;color:#b6c4d8;font-size:clamp(14px,4vw,17px);line-height:1.5;max-width:310px">Meteor Web will open here for transaction approval.</p><small style="display:block;margin-top:18px;color:#71839f;font-size:12px">Keep this tab open.</small></main>';
   } catch {
     // Navigation can still continue even when the placeholder cannot be styled.
   }

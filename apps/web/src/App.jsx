@@ -437,21 +437,27 @@ export default function DemoApp({ locale = "en" }) {
               <div className="nuvi-demo-choice-grid">
                 <button
                   className="nuvi-demo-choice a"
+                  aria-label={t.workA + ": " + t.workAChoice}
                   disabled={Boolean(busy)}
                   onClick={() => void chooseWork("work_a")}
                 >
-                  <strong>{t.workA}</strong>
-                  <span>{t.workAChoice}</span>
-                  <small>{formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE</small>
+                  <span className="nuvi-demo-pill blue" aria-hidden="true"><i /></span>
+                  <span className="nuvi-demo-choice-copy">{t.workAChoice}</span>
+                  <small className="nuvi-demo-choice-action">
+                    {t.tapToChoose} · {formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
+                  </small>
                 </button>
                 <button
                   className="nuvi-demo-choice b"
+                  aria-label={t.workB + ": " + t.workBChoice}
                   disabled={Boolean(busy)}
                   onClick={() => void chooseWork("work_b")}
                 >
-                  <strong>{t.workB}</strong>
-                  <span>{t.workBChoice}</span>
-                  <small>{formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE</small>
+                  <span className="nuvi-demo-pill red" aria-hidden="true"><i /></span>
+                  <span className="nuvi-demo-choice-copy">{t.workBChoice}</span>
+                  <small className="nuvi-demo-choice-action">
+                    {t.tapToChoose} · {formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE
+                  </small>
                 </button>
               </div>
               <small className="nuvi-demo-note">{t.workRandomHint}</small>

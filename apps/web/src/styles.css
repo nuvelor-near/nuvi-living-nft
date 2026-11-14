@@ -44,6 +44,15 @@
   color:#d8e2ff;text-decoration:none;text-transform:none;letter-spacing:0;
   border:1px solid var(--demo-line);border-radius:999px;padding:clamp(4px,.75dvh,6px) 8px;background:rgba(255,255,255,.035)
 }
+.nuvi-demo-wallet.connected{
+  color:#edffff;border-color:rgba(85,223,245,.62);
+  background:linear-gradient(135deg,rgba(85,223,245,.12),rgba(152,116,255,.10));
+  box-shadow:0 0 0 1px rgba(85,223,245,.09),0 0 18px rgba(85,223,245,.14),inset 0 1px 0 rgba(255,255,255,.08);
+}
+.nuvi-demo-wallet.connected:before{
+  content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;
+  background:var(--demo-green);box-shadow:0 0 9px rgba(120,239,175,.75);vertical-align:1px
+}
 .nuvi-demo-progress{
   display:grid;grid-template-columns:repeat(8,1fr);gap:4px;
   margin:clamp(7px,1.35dvh,12px) 0 clamp(5px,1dvh,9px)
@@ -111,6 +120,10 @@ button,a{font:inherit}
 }
 .nuvi-demo-gas-ring span,.nuvi-demo-gas-ring small{color:var(--demo-muted)}
 .nuvi-demo-gas-ring strong{font-size:clamp(18px,3.3dvh,25px)}
+.nuvi-demo-sponsor-note{
+  display:block;max-width:370px;color:#8d9ab2!important;font-size:clamp(8.5px,1.25dvh,10.5px)!important;
+  line-height:1.35;text-align:center
+}
 .nuvi-demo-choice-grid{
   display:grid;grid-template-columns:1fr 1fr;gap:clamp(7px,1.2dvh,10px);width:100%
 }

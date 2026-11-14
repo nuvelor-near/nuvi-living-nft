@@ -304,7 +304,7 @@ export default function DemoApp({ locale = "en" }) {
             {t.stepLabel} {currentStep}/{PHASES.length}
           </span>
           {accountId ? (
-            <ExternalLink href={accountExplorerUrl(accountId)} className="nuvi-demo-wallet">
+            <ExternalLink href={accountExplorerUrl(accountId)} className="nuvi-demo-wallet connected">
               {shortId(accountId, 10, 6)}
             </ExternalLink>
           ) : (
@@ -380,11 +380,9 @@ export default function DemoApp({ locale = "en" }) {
               <div className="nuvi-demo-gas-ring">
                 <span>{t.balance}</span>
                 <strong>{formatNear(demoNearBalance)} NEAR</strong>
-                <small>{t.targetBalance}</small>
               </div>
               <span className="nuvi-demo-kicker">{t.steps.fund}</span>
               <h3>{t.sponsorTitle}</h3>
-              <p>{t.sponsorDescription}</p>
               <button
                 className="nuvi-demo-primary"
                 disabled={Boolean(busy)}
@@ -392,7 +390,9 @@ export default function DemoApp({ locale = "en" }) {
               >
                 {busy === "fund" ? t.fundingDemoGas : t.getDemoGas}
               </button>
-              <small>{t.sponsorSafety}</small>
+              <small className="nuvi-demo-sponsor-note">
+                {t.sponsorDescription} {t.sponsorSafety}
+              </small>
             </div>
           ) : phase === "nft" ? (
             <div className="nuvi-demo-screen centered">
@@ -568,9 +568,9 @@ export default function DemoApp({ locale = "en" }) {
             </div>
           )}
 
-          {accountId && phase !== "proof" && (
+          {accountId && phase !== "proof" && phase !== "fund" && (
             <div className="nuvi-demo-phone-foot">
-              <span>{formatNear(demoNearBalance)} NEAR</span>
+              <span>{t.balance}: {formatNear(demoNearBalance)} NEAR</span>
               {hasNuvi && <span>NUVI #{selectedTokenId}</span>}
               {accountState?.nuveClaimUsed && (
                 <span>{formatNuve(accountState?.nuveBalance || "0")} NUVE</span>

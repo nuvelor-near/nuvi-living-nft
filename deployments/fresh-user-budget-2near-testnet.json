@@ -1,0 +1,188 @@
+{
+  "schema": "nuvi-fresh-user-budget-v1",
+  "measured_at_utc": "2026-11-14T13:05:23.694Z",
+  "account_id": "judgeprobe-2near-a.nvlborc70517034832.testnet",
+  "token_id": "7",
+  "child_account_id": "nuvi-7.nuvi-hack26.nvlborc70517034832.testnet",
+  "initial_balance_yocto": "2000000000000000000000000",
+  "initial_balance_near": "2.000000",
+  "final_balance_yocto": "424795990104466399999994",
+  "final_balance_near": "0.424795",
+  "total_spent_yocto": "1575204009895533600000006",
+  "total_spent_near": "1.575204",
+  "provisioning_deposit_yocto": "1494040000000000000000000",
+  "provisioning_deposit_near": "1.494040",
+  "steps": [
+    {
+      "step": "nuve_storage",
+      "tx_hash": "5pM83yV6CKH8P5BsBbTMmsNoKvRwGfBaagURNXkS3uE2",
+      "before_yocto": "2000000000000000000000000",
+      "after_yocto": "1957830420110839000000000",
+      "delta_yocto": "42169579889161000000000",
+      "delta_near": "0.042169",
+      "attached_deposit_yocto": "1250000000000000000000",
+      "gas_tgas": 40
+    },
+    {
+      "step": "claim_starter_nuvi",
+      "tx_hash": "9cAUWiYtTZeST7Vp6uLYHkp4WGAkEvWjaxR3wqccD3sd",
+      "before_yocto": "1957830420110839000000000",
+      "after_yocto": "1917642298296716600000000",
+      "delta_yocto": "40188121814122400000000",
+      "delta_near": "0.040188",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 80
+    },
+    {
+      "step": "claim_starter_nuve",
+      "tx_hash": "4P2UENDC2LVXyaA4pBuFwE2yjAtCZP9aDjr4eiQ2vRYJ",
+      "before_yocto": "1917642298296716600000000",
+      "after_yocto": "1947209872021610800000000",
+      "delta_yocto": "-29567573724894200000000",
+      "delta_near": "0.-29567",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 50
+    },
+    {
+      "step": "start_feed_sponsor",
+      "tx_hash": "7n7j5q4A1CaLTYL2HPXVEbWD2wcfAtaKcwMLcJW9izEa",
+      "before_yocto": "1947209872021610800000000",
+      "after_yocto": "1886699517980457299999999",
+      "delta_yocto": "60510354041153500000001",
+      "delta_near": "0.060510",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_feed",
+      "tx_hash": "F9JTJYA6uWGWGNQ9AXe5cHgDc4GKmhFitrML34kL479Y",
+      "before_yocto": "1996680450760117399999999",
+      "after_yocto": "1878654666906620499999999",
+      "delta_yocto": "118025783853496900000000",
+      "delta_near": "0.118025",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "start_work_a_sponsor",
+      "tx_hash": "DwEoKxT8LJWCGUWCvSLhPML1KzTrBCPng6fnNLa9ePZc",
+      "before_yocto": "1995887508747777299999999",
+      "after_yocto": "1988904881165684999999998",
+      "delta_yocto": "6982627582092300000001",
+      "delta_near": "0.006982",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_work_a",
+      "tx_hash": "BdCric1NFmrSQhQ8QaM42yrvQ1XLhFmU1LyseQ5rBEi2",
+      "before_yocto": "1994655534123380299999998",
+      "after_yocto": "1873736402509771299999998",
+      "delta_yocto": "120919131613609000000000",
+      "delta_near": "0.120919",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "start_work_a_sponsor",
+      "tx_hash": "A9cmx8Npn5dHrYJX3aWshbU24mYbiHC3L7dfaU8wPqZk",
+      "before_yocto": "1873736402509771299999998",
+      "after_yocto": "1987384395735457799999997",
+      "delta_yocto": "-113647993225686499999999",
+      "delta_near": "0.-11364",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_work_a",
+      "tx_hash": "7hS1HERJSRqhVc1gHxVWjcH9s3gobhUGavJzwNvVScer",
+      "before_yocto": "1993135048693153099999997",
+      "after_yocto": "1872215917079544099999997",
+      "delta_yocto": "120919131613609000000000",
+      "delta_near": "0.120919",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "start_work_b_burn",
+      "tx_hash": "Hs3nRCGU9WCVkm5Dafwysciy1rgYDznLCoAHsaBqbvc9",
+      "before_yocto": "1992846537887322899999997",
+      "after_yocto": "1985887821183939899999996",
+      "delta_yocto": "6958716703383000000001",
+      "delta_near": "0.006958",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_work_b",
+      "tx_hash": "5R8HX9T5LJGDMutZhpZTBWAh9789Jd2MmdKojEjiep97",
+      "before_yocto": "1991638474141635199999996",
+      "after_yocto": "1870719342528026199999996",
+      "delta_yocto": "120919131613609000000000",
+      "delta_near": "0.120919",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "start_work_b_burn",
+      "tx_hash": "915X3iqvfLKBWDf4wsR6EpCg2qBaBLXSNy5CweeHBAqp",
+      "before_yocto": "1870719342528026199999996",
+      "after_yocto": "1984391246714697599999995",
+      "delta_yocto": "-113671904186671399999999",
+      "delta_near": "0.-11367",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_work_b",
+      "tx_hash": "7DxRLNmLRrki3rcA63E2X35kUKYbqwvL1z52zUCDB87R",
+      "before_yocto": "1990141899672392899999995",
+      "after_yocto": "1869222768058783899999995",
+      "delta_yocto": "120919131613609000000000",
+      "delta_near": "0.120919",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "start_work_a_sponsor",
+      "tx_hash": "8KfasreJTmbzZK5Ta68atNKfJY6QpCEuStPr66JxVPRu",
+      "before_yocto": "1989853388948838299999995",
+      "after_yocto": "1982870761366745999999994",
+      "delta_yocto": "6982627582092300000001",
+      "delta_near": "0.006982",
+      "attached_deposit_yocto": "1",
+      "gas_tgas": 220
+    },
+    {
+      "step": "complete_work_a",
+      "tx_hash": "3sbbeUtVRPxe2oxddNQ8qUwDFVL8iUwZ8rkTpJJcJbBC",
+      "before_yocto": "1988621414324441299999994",
+      "after_yocto": "1867702282710832299999994",
+      "delta_yocto": "120919131613609000000000",
+      "delta_near": "0.120919",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    },
+    {
+      "step": "mutate_and_provision",
+      "tx_hash": "8sRcjASNepoDWxgU3qDvxBcTYX7d2rGYvP7Ux6DAq7k4",
+      "before_yocto": "1867702282710832299999994",
+      "after_yocto": "444056652606362099999994",
+      "delta_yocto": "1423645630104470200000000",
+      "delta_near": "1.423645",
+      "attached_deposit_yocto": "1494040000000000000000000",
+      "gas_tgas": 220
+    },
+    {
+      "step": "smart_account_transfer_1_nuve",
+      "tx_hash": "Cb7EGcUGvmL6Eqn6exKrB52necaDnwy9xwK1w1ywuHZy",
+      "before_yocto": "444056652606362099999994",
+      "after_yocto": "424795990104466399999994",
+      "delta_yocto": "19260662501895700000000",
+      "delta_near": "0.019260",
+      "attached_deposit_yocto": "0",
+      "gas_tgas": 120
+    }
+  ],
+  "child_nuve_before": "1000000"
+}

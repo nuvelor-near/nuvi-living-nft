@@ -20,6 +20,12 @@ import {
   startLivingAction,
 } from "./near/gameApi";
 import { extractTransactionHashes } from "./near/transactions";
+import {
+  DEMO_FUNDING_TARGET_YOCTO,
+  formatNear,
+  loadDemoFundingState,
+  requestDemoFunding,
+} from "./near/sponsor";
 import VerifiedProof from "./VerifiedProof";
 
 const ACTIONS = [
@@ -88,6 +94,7 @@ export default function App() {
   const [nowMs, setNowMs] = useState(Date.now());
   const [nuviRecipient, setNuviRecipient] = useState("");
   const [nuviAmount, setNuviAmount] = useState("1.0000");
+  const [demoNearBalance, setDemoNearBalance] = useState("0");
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 500);
@@ -107,7 +114,11 @@ export default function App() {
         return;
       }
 
-      const nextAccount = await loadAccountState(accountId);
+      const [nextAccount, fundingState] = await Promise.all([
+        loadAccountState(accountId),
+        loadDemoFundingState(accountId),
+      ]);
+      setDemoNearBalance(fundingState.balanceYocto);
       const ownedIds = nextAccount.tokens.map((token) => String(token.token_id));
       const current =
         preferredTokenId ||
@@ -162,6 +173,23 @@ export default function App() {
     };
   }, [accountId, refresh]);
 
+  async function fundTestnetWallet() {
+    if (!accountId || busy) return;
+    setBusy("Fund Testnet wallet");
+    setError("");
+    setNotice("");
+    try {
+      const result = await requestDemoFunding(accountId);
+      setDemoNearBalance(result.balanceYocto);
+      setNotice("Demo gas funded to 2.0 Testnet NEAR. You can run the full cycle now.");
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function selectToken(tokenId) {
     setSelectedTokenId(tokenId);
     setError("");
@@ -210,7 +238,7 @@ export default function App() {
     }
   }
 
-  const token = tokenState?.token;
+  const token = [REDACTED];
   const living = tokenState?.living;
   const mutation = tokenState?.mutation;
   const nuviAccount = tokenState?.nuviAccount;
@@ -334,16 +362,36 @@ export default function App() {
                     <h3>Starter assets</h3>
                   </div>
                   <span className="nuve-balance">
-                    {formatNuve(accountState?.nuveBalance || "0")} NUVE
+                    {formatNear(demoNearBalance)} NEAR · {formatNuve(accountState?.nuveBalance || "0")} NUVE
                   </span>
                 </div>
 
                 <div className="starter-actions">
                   <button
+                    className="button ghost"
+                    disabled={
+                      Boolean(busy) ||
+                      BigInt(demoNearBalance || "0") >= DEMO_FUNDING_TARGET_YOCTO ||
+                      accountState?.nftClaimUsed ||
+                      accountState?.nuveClaimUsed
+                    }
+                    onClick={() => void fundTestnetWallet()}
+                  >
+                    {BigInt(demoNearBalance || "0") >= DEMO_FUNDING_TARGET_YOCTO
+                      ? "Testnet gas ready"
+                      : busy === "Fund Testnet wallet"
+                        ? "Funding demo gas…"
+                        : accountState?.nftClaimUsed || accountState?.nuveClaimUsed
+                          ? "Funding available before Starter claim"
+                          : "Get demo gas · up to 2 NEAR"}
+                  </button>
+
+                  <button
                     className="button primary"
                     disabled={
                       !contractsConfigured ||
                       accountState?.nftClaimUsed ||
+                      BigInt(demoNearBalance || "0") < DEMO_FUNDING_TARGET_YOCTO ||
                       Boolean(busy)
                     }
                     onClick={() =>
@@ -364,6 +412,7 @@ export default function App() {
                     disabled={
                       !contractsConfigured ||
                       accountState?.nuveClaimUsed ||
+                      BigInt(demoNearBalance || "0") < DEMO_FUNDING_TARGET_YOCTO ||
                       Boolean(busy)
                     }
                     onClick={() =>
@@ -381,6 +430,12 @@ export default function App() {
                           : "Register + claim 100 NUVE"}
                   </button>
                 </div>
+                <small>
+                  A fresh wallet needs 2.0 Testnet NEAR. The amount was verified
+                  against the complete cold-start cycle, including Smart Account
+                  provisioning. NUVI tops up the connected Testnet account directly;
+                  no external faucet or page change is required.
+                </small>
               </article>
 
               <article className="panel">

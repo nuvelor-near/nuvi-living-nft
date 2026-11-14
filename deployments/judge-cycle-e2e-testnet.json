@@ -1,0 +1,111 @@
+{
+  "schema": "nuvi-judge-cycle-e2e-v1",
+  "generated_at_utc": "2026-11-14T14:55:05.772Z",
+  "account_id": "judgecycle-1114a.nvlborc70517034832.testnet",
+  "sponsor_url": "https://nuvelor.gg/api/hackathon/nuvi/testnet-fund",
+  "transactions": [
+    {
+      "method": "create_account",
+      "tx_hash": "MpE7nByTZGao946BmtM1atbpB8HJiVvKAnJ1bZ3E2M4",
+      "amount_yocto": "50000000000000000000000"
+    },
+    {
+      "method": "storage_deposit",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "4AwYmcoPuBysWE66RXfCJmsAZfHQ9YhbFeaKwY7zSp1p"
+    },
+    {
+      "method": "claim_starter_nuvi",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "FeqW3SBAN1YSdxXxcFYqbhezzaySxBHDncUxFiyYG8dh"
+    },
+    {
+      "method": "starter_claim",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "EPEbJTeuoNouXwE6BqV8PVH43jy4MpBfCZGJXkN4gmhQ"
+    },
+    {
+      "method": "ft_transfer_call",
+      "contract_id": "nuve-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "3bo1aJARzj5yJLQ4LGaiVdqKkhsXxAcU965VGn8FAXrc"
+    },
+    {
+      "method": "mutate",
+      "contract_id": "nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "8frRNk4ePinyjkRQP8yWWLKPxo4Xi2obCCSKNtCkYHDY"
+    },
+    {
+      "method": "request_ft_transfer",
+      "contract_id": "nuvi-8.nuvi-hack26.nvlborc70517034832.testnet",
+      "tx_hash": "94btnDXtD1KZDZYcwwoRzaErFHpRJ7KbeooRoWNgQfZ5"
+    }
+  ],
+  "sponsor": {
+    "account_id": "judgecycle-1114a.nvlborc70517034832.testnet",
+    "balance_after_yocto": "2000000000000000000000000",
+    "balance_before_yocto": "50000000000000000000000",
+    "created_at_utc": "2026-11-14T14:54:39.477273+00:00",
+    "grant_yocto": "1950000000000000000000000",
+    "schema": "nuvi-testnet-sponsor-claim-v1",
+    "status": "funded",
+    "target_yocto": "2000000000000000000000000",
+    "tx_hash": "HkchFYVMKFM121ZswpZzHqcHz6nG4AYPzFj2jMkNJR92"
+  },
+  "balance_after_sponsor_yocto": "2000000000000000000000000",
+  "token_id": "8",
+  "living_after_work": {
+    "form_id": "basic",
+    "level": 1,
+    "xp": 1,
+    "specialization": null,
+    "mutation_count": 0,
+    "work_a_xp": 1,
+    "work_b_xp": 0,
+    "sponsor_spent": "100000",
+    "burner_spent": "0",
+    "active_action": null,
+    "ready_at_ns": 0
+  },
+  "mutation_preview": {
+    "token_id": "8",
+    "eligible": true,
+    "current_form_id": "basic",
+    "mutation_stage": 0,
+    "xp": 1,
+    "threshold_xp": 1,
+    "work_a_xp": 1,
+    "work_b_xp": 0,
+    "sponsor_level": 1,
+    "burner_level": 0,
+    "form_a_weight": 35,
+    "form_b_weight": 10,
+    "form_a_probability_bps": 7777,
+    "form_b_probability_bps": 2223
+  },
+  "provisioning_deposit_yocto": "1494040000000000000000000",
+  "child_account_id": "nuvi-8.nuvi-hack26.nvlborc70517034832.testnet",
+  "final_token": {
+    "token_id": "8",
+    "owner_id": "judgecycle-1114a.nvlborc70517034832.testnet",
+    "metadata": {
+      "title": "NUVI Starter",
+      "description": "Nuvi is a mysterious creature powered by NUVELOR energy. It farms NUVE and evolves with the player.",
+      "media": "https://nuvelor.gg/assets/hackathon/nuvi/form_a.png",
+      "media_hash": null,
+      "copies": 1,
+      "issued_at": 1794668083008898300,
+      "expires_at": null,
+      "starts_at": null,
+      "updated_at": null,
+      "extra": "{\"type\":\"Mascot\",\"character\":\"Nuvi\",\"base_rarity\":\"Common\",\"form_id\":\"form_a\",\"nuvi_account_status\":\"active\",\"nuvi_account_expected_id\":\"nuvi-8.nuvi-hack26.nvlborc70517034832.testnet\",\"nuvi_account_id\":\"nuvi-8.nuvi-hack26.nvlborc70517034832.testnet\",\"level\":1,\"xp\":1,\"mutation_count\":1,\"work_a_xp\":1,\"work_b_xp\":0,\"sponsor_spent\":\"100000\",\"burner_spent\":\"0\",\"active_action\":null,\"ready_at_ns\":0}",
+      "reference": null,
+      "reference_hash": null
+    },
+    "approved_account_ids": {}
+  },
+  "child_access_key_count": 0,
+  "child_nuve_before": "1000000",
+  "child_nuve_after": "990000",
+  "final_balance_yocto": "433122800299866999999999",
+  "status": "PASS"
+}

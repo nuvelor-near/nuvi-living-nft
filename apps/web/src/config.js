@@ -8,6 +8,10 @@ function value(name, fallback = "") {
 export const appConfig = Object.freeze({
   networkId: value("VITE_NEAR_NETWORK_ID", "testnet"),
   rpcUrl: value("VITE_NEAR_RPC_URL", "https://rpc.testnet.fastnear.com"),
+  sponsorUrl: value(
+    "VITE_SPONSOR_URL",
+    "/api/hackathon/nuvi/testnet-fund",
+  ),
   nftContractId: value(
     "VITE_NFT_CONTRACT_ID",
     "nuvi-hack26.nvlborc70517034832.testnet",

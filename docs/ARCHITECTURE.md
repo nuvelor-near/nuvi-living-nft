@@ -62,20 +62,22 @@ Verified:
 
 Public machine evidence lives in `deployments/`.
 
-Next critical gate:
+Remaining submission work:
 
-- add final generated form images;
-- publish the static web client;
-- set collection `base_uri` to the public `/forms` directory;
-- verify wallet/browser demo against the deployed Testnet contracts;
-- capture screenshots/video and submission evidence.
+- capture final screenshots/video and submission evidence;
+- keep the public demo and bounded sponsor healthy through judging.
 
 ## Testnet sponsor
 
-Deferred until wallet-first Testnet E2E is proven.
+Judge onboarding uses a bounded Testnet-only sponsor:
 
-- bounded Testnet funding only;
-- no production credentials;
-- add only if judge onboarding needs it.
+- target balance: 2.0 NEAR for a fresh connected Testnet wallet;
+- eligibility: available only before either Starter claim;
+- idempotency: one ledger-backed grant per account; repeated requests return the original result instead of transferring again;
+- reserve floor: the signer refuses grants that would cross its configured reserve;
+- credential boundary: dedicated Testnet sponsor key only; no production/Mainnet credential is mounted;
+- public route: /api/hackathon/nuvi/testnet-fund;
+- measured cold-start requirement: 1.575204 NEAR for the earlier five-Work full cycle, leaving 0.424796 NEAR from a 2.0 NEAR start;
+- current accelerated judge-cycle E2E passes from the same 2.0 NEAR target with one Work action and full smart-account provisioning/transfer.
 
 Production NUVELOR contracts are outside this Hackathon execution boundary.

@@ -16,7 +16,18 @@ The demo is isolated from NUVELOR Mainnet/production contracts. Wallet-signed ac
 
 ## 60-second judge path
 
-The shortest proof does not require trusting the UI:
+The fastest interactive proof now starts from a fresh Testnet wallet without leaving the demo:
+
+1. Connect a NEAR Testnet wallet.
+2. Press **Get demo gas**. The bounded sponsor tops a fresh account up to 2.0 NEAR.
+3. Claim Starter NUVI and 100 NUVE.
+4. Run one Work A/B action. Work settles immediately and awards 1 XP.
+5. Mutate the same NFT; mutation provisions its deterministic keyless NUVI Account.
+6. Send 1.0000 NUVE from that NUVI Account back to the connected wallet.
+
+Independent machine evidence for this exact fresh-wallet path is deployments/judge-cycle-e2e-testnet.json. Token #8 completed the cycle and its child account has 0 access keys.
+
+The shortest read-only proof still does not require trusting the UI:
 
 1. Open the live demo and inspect the **Verified Testnet E2E** section.
 2. Open Living NFT token `#1` on Testnet and read `metadata.extra.nuvi_account_id`.
@@ -75,7 +86,9 @@ Implemented and accepted on Testnet:
   - every outgoing NUVE request fresh-checks the current owner of the bound NFT;
   - control follows NFT ownership without moving the child account or its assets;
 - Hackathon web client:
-  Testnet wallet connection derived from the production-tested NUVELOR `@hot-labs/near-connect` path, direct NEAR RPC reads, starter claims, gameplay, mutation, smart-account live proof, real NUVE transfer and explorer evidence.
+  Testnet wallet connection derived from the production-tested NUVELOR near-connect path, bounded in-page Testnet gas sponsorship, direct NEAR RPC reads, starter claims, one-cycle gameplay, mutation, smart-account live proof, real NUVE transfer and explorer evidence.
+- Judge Testnet sponsor:
+  a fresh connected wallet may receive one bounded top-up to 2.0 NEAR before either Starter claim; the sponsor is Testnet-only and uses no Mainnet credential.
 
 Current acceptance:
 
@@ -86,6 +99,7 @@ Current acceptance:
 - Web production build: **PASS**
 - Live Testnet smart-account E2E: **PASS**
 - Public `nuvelor.gg` release: **LIVE**
+- Fresh sponsor-funded judge cycle: **PASS** (deployments/judge-cycle-e2e-testnet.json)
 
 ## Live Testnet deployment
 
@@ -94,12 +108,13 @@ Hackathon accounts:
 - Living NFT: `nuvi-hack26.nvlborc70517034832.testnet`
 - NUVE FT: `nuve-hack26.nvlborc70517034832.testnet`
 - Treasury: `treasury-hack26.nvlborc70517034832.testnet`
+- Sponsor account: sponsor-hack26.nvlborc70517034832.testnet
 - E2E player: `player-hack26.nvlborc70517034832.testnet`
 - NUVI `#1` account: `nuvi-1.nuvi-hack26.nvlborc70517034832.testnet`
 
 Accepted WASM SHA-256:
 
-- Living NFT: `c76e557543d127b023f07d435211c19a8ed040967b7bb823ee27492952c91f91`
+- Living NFT: `721454ef99eac4d27bb043f761c835a9a40d79c5dda1a65593edab0e95d4ca1c`
 - NUVI Account executor: `33ba2335814ecbbd94da66b4df5431e190cd3e2b70368a85deaea18081a8814c`
 
 Live child-account proof for token `#1`:
@@ -126,12 +141,14 @@ Machine-readable evidence:
 - `deployments/e2e-testnet.json`
 - `deployments/smart-account-upgrade-testnet.json`
 - `deployments/smart-account-e2e-testnet.json`
+- deployments/fresh-user-budget-2near-testnet.json
+- deployments/judge-cycle-e2e-testnet.json
 
 ## Earlier Living NFT E2E
 
-The original gameplay path remains accepted:
+The original five-Work gameplay path remains accepted as historical evidence. The current Hackathon demo is intentionally accelerated to one Work cycle:
 
-`starter NUVI → starter 100 NUVE → Feed/Sponsor → Feed reward → 5 Work actions across Sponsor/Burn → XP 5 → mutation`
+`starter NUVI → starter 100 NUVE → one Work A/B → XP 1 → mutation → keyless NUVI Account → 1 NUVE transfer`
 
 Observed token `#1` gameplay state:
 

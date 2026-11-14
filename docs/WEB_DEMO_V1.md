@@ -55,27 +55,19 @@ The web app reads live Hackathon state directly and requires no private environm
 ## Demo flow implemented in UI
 
 1. Connect NEAR Testnet wallet.
-2. Claim one Starter NUVI.
-3. Register FT storage when needed and claim 100 Starter NUVE.
-4. Display owned NUVI, current form and LivingState.
-5. Choose Treasury/Sponsor or Burn/Burner route.
-6. Start Feed, Work A or Work B through NUVE `ft_transfer_call`.
-7. Display active timer and complete the action when ready.
-8. Display XP, affinities and economic behavior.
-9. Display on-chain Form A/Form B mutation probabilities.
-10. Execute the one-time mutation.
-11. Mutation starts deterministic keyless NUVI Account provisioning.
-12. Display account status `Not created / Provisioning / Active / Failed`.
-13. Once active, prove from live RPC:
-    - child account exists;
-    - contract code is deployed;
-    - access key list is empty;
-    - executor binding matches NFT + token ID + NUVE FT;
-    - NFT metadata contains the same `nuvi_account_id`;
-    - child is NUVE storage-registered;
-    - child NUVE balance is live.
-14. Execute a real `1.0000 NUVE` transfer from the NUVI Account to a registered Testnet recipient.
-15. Surface the resulting Testnet transaction as explorer evidence.
+2. If the balance is below 2.0 NEAR, press **Get demo gas**; the bounded Testnet sponsor tops the fresh account up to 2.0 NEAR without leaving the page.
+3. Claim one Starter NUVI.
+4. Register FT storage when needed and claim 100 Starter NUVE.
+5. Display owned NUVI, current form and LivingState.
+6. Choose Treasury/Sponsor or Burn/Burner route.
+7. Run one Work A or Work B through NUVE ft_transfer_call; Work settles in the same signed flow and immediately awards 1 XP.
+8. Display XP, affinities, economic behavior and the on-chain Form A/Form B mutation probabilities.
+9. Execute the one-time mutation.
+10. Mutation starts deterministic keyless NUVI Account provisioning.
+11. Display account status Not created / Provisioning / Active / Failed.
+12. Once active, prove from live RPC that the child exists, has deployed code, has 0 access keys, matches the NFT/token/FT binding, is storage-registered and exposes live NUVE balance.
+13. Execute a real 1.0000 NUVE transfer from the NUVI Account to the registered Testnet wallet.
+14. Surface the resulting Testnet transaction as explorer evidence.
 
 The page also contains a static judge-facing **Verified Testnet E2E** summary that remains useful without connecting a wallet.
 
@@ -88,7 +80,7 @@ Token `#1` has a deterministic direct child:
 Accepted live facts:
 
 - Living NFT WASM SHA-256:
-  `c76e557543d127b023f07d435211c19a8ed040967b7bb823ee27492952c91f91`
+  `721454ef99eac4d27bb043f761c835a9a40d79c5dda1a65593edab0e95d4ca1c`
 - child executor WASM SHA-256:
   `33ba2335814ecbbd94da66b4df5431e190cd3e2b70368a85deaea18081a8814c`
 - access keys: `0`
@@ -106,6 +98,8 @@ Machine-readable proof:
 
 - `deployments/smart-account-upgrade-testnet.json`
 - `deployments/smart-account-e2e-testnet.json`
+- deployments/fresh-user-budget-2near-testnet.json
+- deployments/judge-cycle-e2e-testnet.json
 
 ## Public configuration
 
@@ -116,6 +110,7 @@ Public override values:
 - `VITE_TREASURY_ID`
 - `VITE_DEMO_PLAYER_ID`
 - `VITE_DEMO_MUTATION_TX`
+- VITE_SPONSOR_URL (defaults to same-origin /api/hackathon/nuvi/testnet-fund)
 - optional RPC/explorer overrides
 
 No private key or deploy credential belongs in the web environment.

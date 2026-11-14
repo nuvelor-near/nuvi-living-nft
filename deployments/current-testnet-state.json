@@ -1,0 +1,46 @@
+{
+  "schema": "nuvi-hackathon-current-testnet-state-v1",
+  "generated_at_utc": "2026-11-14T20:40:26.056Z",
+  "network_id": "testnet",
+  "rpc_url": "https://rpc.testnet.fastnear.com",
+  "living_nft_account_id": "nuvi-hack26.nvlborc70517034832.testnet",
+  "nuve_ft_account_id": "nuve-hack26.nvlborc70517034832.testnet",
+  "living_nft_code": {
+    "sha256": "721454ef99eac4d27bb043f761c835a9a40d79c5dda1a65593edab0e95d4ca1c",
+    "size_bytes": 884682,
+    "code_hash": "8gKTdL3HnNY1xchJYkUHTNizP89ktuFCkMeaaLLUsLyZ",
+    "block_height": 277707476
+  },
+  "nuve_ft_code": {
+    "sha256": "c176a91f96007958564470f9a6e783fe6e3ef5ffbfe1b040dda1188db90c9f0e",
+    "size_bytes": 217437,
+    "code_hash": "E2CdXSRLrjadCZsZ5rPtERUwAVRK8jHLneqMMYkkLtey",
+    "block_height": 277707476
+  },
+  "living_game_config": {
+    "nuve_ft_id": "nuve-hack26.nvlborc70517034832.testnet",
+    "treasury_id": "treasury-hack26.nvlborc70517034832.testnet",
+    "nuve_decimals": 4,
+    "feed_cost": "50000",
+    "work_cost": "100000",
+    "feed_duration_ns": 30000000000,
+    "work_duration_ns": 0,
+    "mutation_threshold_xp": 1
+  },
+  "nuvi_account_creation_deposit_yocto": "1494040000000000000000000",
+  "token_1": {
+    "owner_id": "player-hack26.nvlborc70517034832.testnet",
+    "form_id": "form_b",
+    "nuvi_account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+    "nuvi_account_status": "active",
+    "expected_nuvi_account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet"
+  },
+  "child_account": {
+    "account_id": "nuvi-1.nuvi-hack26.nvlborc70517034832.testnet",
+    "access_key_count": 0,
+    "code_hash": "4UvQzEbhPVC7CZQwGFm3H6gPsGdUDkoe6H2Anyo5ndWb",
+    "storage_usage": 139513,
+    "balance_yocto": "1492789999999999999999998",
+    "nuve_balance_atomic": "980000"
+  }
+}

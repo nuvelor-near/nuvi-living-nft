@@ -137,12 +137,18 @@ Live child-account proof for token `#1`:
 
 Machine-readable evidence:
 
-- `deployments/testnet.json`
-- `deployments/e2e-testnet.json`
-- `deployments/smart-account-upgrade-testnet.json`
-- `deployments/smart-account-e2e-testnet.json`
-- deployments/fresh-user-budget-2near-testnet.json
-- deployments/judge-cycle-e2e-testnet.json
+Current live / judge evidence:
+
+- `deployments/current-testnet-state.json` — fresh finality RPC readback of the live Testnet code/config and zero-key NUVI Account state;
+- `deployments/judge-cycle-e2e-testnet.json` — current accelerated fresh-wallet path: sponsor → Starter claims → one Work → mutation/provisioning → real NUVE transfer;
+- `deployments/smart-account-e2e-testnet.json` — ownership-control invariant proof, including non-owner rejection and control transfer with NFT ownership.
+
+Historical checkpoints retained for provenance (not the current runtime configuration):
+
+- `deployments/testnet.json` — original Testnet deployment snapshot before the final one-Work acceleration;
+- `deployments/e2e-testnet.json` — original five-Work Living NFT E2E;
+- `deployments/smart-account-upgrade-testnet.json` — earlier smart-account upgrade checkpoint;
+- `deployments/fresh-user-budget-2near-testnet.json` — earlier five-Work gas-budget measurement.
 
 ## Earlier Living NFT E2E
 

@@ -1,3 +1,5 @@
+> **Historical checkpoint.** This document records the original five-Work Testnet E2E. The current judge path is accelerated to one Work action; use `README.md`, `docs/WEB_DEMO_V1.md`, `deployments/current-testnet-state.json`, and `deployments/judge-cycle-e2e-testnet.json` for the current Hackathon runtime.
+
 # NUVI Testnet E2E v1
 
 Status: **LIVE PASS** on NEAR Testnet.

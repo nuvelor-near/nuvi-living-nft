@@ -62,9 +62,9 @@ Verified:
 
 Public machine evidence lives in `deployments/`.
 
-Remaining submission work:
+Submission/runtime maintenance:
 
-- capture final screenshots/video and submission evidence;
+- current judge-facing implementation and machine-readable evidence are published in the root README and `deployments/current-testnet-state.json`;
 - keep the public demo and bounded sponsor healthy through judging.
 
 ## Testnet sponsor

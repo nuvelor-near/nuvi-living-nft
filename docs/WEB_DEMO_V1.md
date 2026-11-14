@@ -96,10 +96,14 @@ Accepted live facts:
 
 Machine-readable proof:
 
-- `deployments/smart-account-upgrade-testnet.json`
+Current:
+- `deployments/current-testnet-state.json`
+- `deployments/judge-cycle-e2e-testnet.json`
 - `deployments/smart-account-e2e-testnet.json`
-- deployments/fresh-user-budget-2near-testnet.json
-- deployments/judge-cycle-e2e-testnet.json
+
+Historical provenance:
+- `deployments/smart-account-upgrade-testnet.json`
+- `deployments/fresh-user-budget-2near-testnet.json`
 
 ## Public configuration
 

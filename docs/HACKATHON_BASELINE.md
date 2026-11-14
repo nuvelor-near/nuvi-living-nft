@@ -1,3 +1,5 @@
+> **Historical baseline.** This document preserves the starting Hackathon baseline. For current implementation, judge steps and live Testnet evidence, use the root `README.md` and `deployments/current-testnet-state.json`.
+
 # Hackathon Baseline
 
 ## Existing before this repository

@@ -9,10 +9,7 @@ export function formatNear(yocto, decimals = 3) {
   const amount = BigInt(yocto || "0");
   const unit = 10n ** 24n;
   const whole = amount / unit;
-  const fraction = (amount % unit)
-    .toString()
-    .padStart(24, "0")
-    .slice(0, decimals);
+  const fraction = (amount % unit).toString().padStart(24, "0").slice(0, decimals);
   return decimals > 0 ? `${whole}.${fraction}` : String(whole);
 }
 
@@ -44,11 +41,11 @@ export async function requestDemoFunding(accountId) {
   }
 
   if (!response.ok && response.status !== 202) {
-    const message =
+    throw new Error(
       payload?.message ||
-      payload?.error ||
-      `Testnet sponsor failed with HTTP ${response.status}`;
-    throw new Error(message);
+        payload?.error ||
+        `Testnet sponsor failed with HTTP ${response.status}`,
+    );
   }
 
   let funding = await loadDemoFundingState(accountId);
@@ -63,9 +60,5 @@ export async function requestDemoFunding(accountId) {
     );
   }
 
-  return {
-    ...(payload || {}),
-    balanceYocto: funding.balanceYocto,
-    ready: true,
-  };
+  return { ...(payload || {}), balanceYocto: funding.balanceYocto, ready: true };
 }

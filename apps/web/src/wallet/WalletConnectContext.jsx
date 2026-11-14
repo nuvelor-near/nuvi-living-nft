@@ -7,6 +7,12 @@ import React, {
 } from "react";
 import { NearConnector } from "@hot-labs/near-connect";
 import { appConfig } from "../config";
+import {
+  emitWalletDiagnostic,
+  installWalletOpenInterceptor,
+  nearConnectLogger,
+} from "./diagnostics";
+import { installMeteorMobileWebExecutorPatch } from "./meteorExecutorPatch";
 
 let globalConnectorPromise = null;
 
@@ -16,6 +22,7 @@ const NEAR_CONNECT_MANIFEST_URLS = [
 ];
 
 const LOCAL_HOT_WALLET_EXECUTOR_PATH = "wallet-executors/hotwallet.js";
+const ALLOWED_WALLET_IDS = new Set(["hot-wallet", "meteor-wallet"]);
 
 function localHotWalletExecutorUrl() {
   const baseUrl = import.meta.env.BASE_URL || "/";
@@ -36,14 +43,16 @@ async function loadNearConnectorManifest() {
 
     return {
       ...manifest,
-      wallets: manifest.wallets.map((wallet) =>
-        wallet?.id === "hot-wallet"
-          ? {
-              ...wallet,
-              executor,
-            }
-          : wallet,
-      ),
+      wallets: manifest.wallets
+        .filter((wallet) => ALLOWED_WALLET_IDS.has(wallet?.id))
+        .map((wallet) =>
+          wallet?.id === "hot-wallet"
+            ? {
+                ...wallet,
+                executor,
+              }
+            : wallet,
+        ),
     };
   }
 
@@ -51,9 +60,17 @@ async function loadNearConnectorManifest() {
 }
 
 async function createConnector() {
+  installWalletOpenInterceptor();
+  installMeteorMobileWebExecutorPatch();
   const manifest = await loadNearConnectorManifest();
+  emitWalletDiagnostic("connector-create", {
+    network: appConfig.networkId,
+    manifest: manifest ? "remote-allowlist" : "default",
+  });
   return new NearConnector({
     network: appConfig.networkId,
+    logger: nearConnectLogger,
+    footerBranding: null,
     ...(manifest ? { manifest } : {}),
   });
 }
@@ -68,21 +85,30 @@ function getConnector() {
   return globalConnectorPromise;
 }
 
-async function readAccountId(connector) {
+async function readWalletConnection(connector) {
   if (typeof connector?.getConnectedWallet === "function") {
     const connected = await connector.getConnectedWallet().catch(() => null);
     const accountId = connected?.accounts?.[0]?.accountId;
-    if (accountId) return accountId;
+    if (accountId) {
+      return {
+        accountId,
+        walletId: connected?.wallet?.manifest?.id || null,
+      };
+    }
   }
 
   const wallet = await connector?.wallet?.().catch(() => null);
   const accounts = (await wallet?.getAccounts?.().catch(() => [])) || [];
-  return accounts[0]?.accountId || null;
+  return {
+    accountId: accounts[0]?.accountId || null,
+    walletId: wallet?.manifest?.id || null,
+  };
 }
 
 const WalletContext = createContext({
   connector: null,
   accountId: null,
+  walletId: null,
   isLoading: true,
   error: null,
   connect: async () => false,
@@ -92,6 +118,7 @@ const WalletContext = createContext({
 export function WalletConnectProvider({ children }) {
   const [connector, setConnector] = useState(null);
   const [accountId, setAccountId] = useState(null);
+  const [walletId, setWalletId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const unsubscribeRef = useRef(null);
@@ -108,13 +135,29 @@ export function WalletConnectProvider({ children }) {
         if (cancelled) return;
 
         setConnector(nextConnector);
-        setAccountId(await readAccountId(nextConnector));
+        const restored = await readWalletConnection(nextConnector);
+        setAccountId(restored.accountId);
+        setWalletId(restored.walletId);
+        if (restored.accountId) {
+          emitWalletDiagnostic("wallet-restored", {
+            walletId: restored.walletId || "unknown",
+          });
+        }
 
         const handleSignIn = async (event) => {
+          const restoredAfterSignIn = await readWalletConnection(nextConnector);
           const eventAccount = event?.accounts?.[0]?.accountId;
-          setAccountId(eventAccount || (await readAccountId(nextConnector)));
+          setAccountId(eventAccount || restoredAfterSignIn.accountId);
+          setWalletId(restoredAfterSignIn.walletId);
+          emitWalletDiagnostic("wallet-sign-in-event", {
+            walletId: restoredAfterSignIn.walletId || "unknown",
+          });
         };
-        const handleSignOut = () => setAccountId(null);
+        const handleSignOut = () => {
+          setAccountId(null);
+          setWalletId(null);
+          emitWalletDiagnostic("wallet-sign-out-event");
+        };
 
         if (typeof nextConnector.on === "function") {
           nextConnector.on("wallet:signIn", handleSignIn);
@@ -129,6 +172,7 @@ export function WalletConnectProvider({ children }) {
           setError(cause instanceof Error ? cause.message : String(cause));
           setConnector(null);
           setAccountId(null);
+          setWalletId(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -149,10 +193,19 @@ export function WalletConnectProvider({ children }) {
     setError(null);
 
     try {
-      await connector.connect();
-      setAccountId(await readAccountId(connector));
+      emitWalletDiagnostic("wallet-connect-start");
+      const connectedWallet = await connector.connect();
+      const restored = await readWalletConnection(connector);
+      setAccountId(restored.accountId);
+      setWalletId(connectedWallet?.manifest?.id || restored.walletId);
+      emitWalletDiagnostic("wallet-connect-success", {
+        walletId: connectedWallet?.manifest?.id || restored.walletId || "unknown",
+      });
       return true;
     } catch (cause) {
+      emitWalletDiagnostic("wallet-connect-error", {
+        message: cause instanceof Error ? cause.message : String(cause),
+      });
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
       throw cause;
@@ -171,6 +224,8 @@ export function WalletConnectProvider({ children }) {
       }
     } finally {
       setAccountId(null);
+      setWalletId(null);
+      emitWalletDiagnostic("wallet-disconnected");
     }
   }
 
@@ -179,6 +234,7 @@ export function WalletConnectProvider({ children }) {
       value={{
         connector,
         accountId,
+        walletId,
         isLoading,
         error,
         connect,

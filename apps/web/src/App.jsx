@@ -1,21 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  accountExplorerUrl,
-  appConfig,
-  contractsConfigured,
-  txExplorerUrl,
-} from "./config";
+import { accountExplorerUrl, contractsConfigured, txExplorerUrl } from "./config";
 import { useWalletConnect } from "./wallet/WalletConnectContext";
 import {
-  actionReady,
   claimStarterNuve,
   claimStarterNuvi,
-  completeLivingAction,
   formatNuve,
   loadAccountState,
   loadTokenState,
   mutateNuvi,
-  nsToMs,
   sendNuviAccountNuve,
   startLivingAction,
 } from "./near/gameApi";
@@ -26,91 +18,99 @@ import {
   loadDemoFundingState,
   requestDemoFunding,
 } from "./near/sponsor";
-import VerifiedProof from "./VerifiedProof";
+import { getNuviDemoCopy } from "./demoCopyV2";
+import {
+  emitWalletDiagnostic,
+  isMobileBrowser,
+  primeMeteorWebWindow,
+  releasePrimedMeteorWebWindow,
+} from "./wallet/diagnostics";
 
-const ACTIONS = [
-  { id: "feed", label: "Feed", detail: "30 sec · reward 1 NUVE" },
-  { id: "work_a", label: "Work A", detail: "instant · +1 XP / A affinity" },
-  { id: "work_b", label: "Work B", detail: "instant · +1 XP / B affinity" },
-];
-
+const PHASES = ["connect", "fund", "nft", "nuve", "work", "mutate", "control", "proof"];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function shortId(value, head = 12, tail = 8) {
   if (!value) return "—";
   if (value.length <= head + tail + 3) return value;
-  return `${value.slice(0, head)}…${value.slice(-tail)}`;
+  return value.slice(0, head) + "…" + value.slice(-tail);
 }
 
-function formLabel(formId) {
-  if (formId === "form_a") return "Form A";
-  if (formId === "form_b") return "Form B";
-  return "Basic";
+function formLabel(formId, t) {
+  if (formId === "form_a") return t.formA;
+  if (formId === "form_b") return t.formB;
+  return t.basic;
 }
 
-function countdown(readyAtNs, nowMs) {
-  if (!readyAtNs) return "—";
-  const remaining = Math.max(0, nsToMs(readyAtNs) - nowMs);
-  if (remaining <= 0) return "Ready";
-  return `${Math.ceil(remaining / 1000)}s`;
+function formMediaUrl(formId) {
+  if (formId === "form_a") return "/assets/hackathon/nuvi/form_a.webp";
+  if (formId === "form_b") return "/assets/hackathon/nuvi/form_b.webp";
+  return "/assets/hackathon/nuvi/basic.webp";
 }
 
-function Stat({ label, value }) {
-  return (
-    <div className="stat">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function ExternalLink({ href, children }) {
+function ExternalLink({ href, children, className = "" }) {
   if (!href) return children;
   return (
-    <a href={href} target="_blank" rel="noreferrer">
+    <a className={className} href={href} target="_blank" rel="noreferrer">
       {children}
     </a>
   );
 }
 
-export default function App() {
+function NuviVisual({ imageUrl, form, tokenId, ghost = false }) {
+  return (
+    <div className={"nuvi-demo-visual" + (ghost ? " is-ghost" : "")}>
+      <div className="nuvi-demo-orbit" aria-hidden="true" />
+      <img src={imageUrl} alt={"NUVI " + form} />
+      <div className="nuvi-demo-visual-meta">
+        <strong>{tokenId ? "NUVI #" + tokenId : "NUVI"}</strong>
+        <span>{form}</span>
+      </div>
+    </div>
+  );
+}
+
+function Progress({ phase, t }) {
+  const current = Math.max(0, PHASES.indexOf(phase));
+  return (
+    <div className="nuvi-demo-progress" aria-label={t.progressLabel}>
+      {PHASES.map((item, index) => (
+        <span
+          key={item}
+          className={(index < current ? "done " : "") + (index === current ? "active" : "")}
+          title={t.steps[item]}
+        />
+      ))}
+    </div>
+  );
+}
+
+export default function DemoApp({ locale = "en" }) {
   const {
     connector,
     accountId,
+    walletId,
     isLoading: walletLoading,
     error: walletError,
     connect,
     disconnect,
   } = useWalletConnect();
 
+  const t = useMemo(() => getNuviDemoCopy(locale), [locale]);
   const [accountState, setAccountState] = useState(null);
   const [tokenState, setTokenState] = useState(null);
   const [selectedTokenId, setSelectedTokenId] = useState("");
-  const [route, setRoute] = useState("sponsor");
+  const [demoNearBalance, setDemoNearBalance] = useState("0");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [activity, setActivity] = useState([]);
-  const [nowMs, setNowMs] = useState(Date.now());
-  const [nuviRecipient, setNuviRecipient] = useState("");
-  const [nuviAmount, setNuviAmount] = useState("1.0000");
-  const [demoNearBalance, setDemoNearBalance] = useState("0");
-
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 500);
-    return () => window.clearInterval(id);
-  }, []);
-
-
-  useEffect(() => {
-    if (accountId) setNuviRecipient(accountId);
-  }, [accountId]);
+  const [proofTxHash, setProofTxHash] = useState("");
 
   const refresh = useCallback(
     async (preferredTokenId = "") => {
       if (!accountId || !contractsConfigured) {
         setAccountState(null);
         setTokenState(null);
+        setSelectedTokenId("");
         return;
       }
 
@@ -118,70 +118,113 @@ export default function App() {
         loadAccountState(accountId),
         loadDemoFundingState(accountId),
       ]);
+
+      setAccountState(nextAccount);
       setDemoNearBalance(fundingState.balanceYocto);
-      const ownedIds = nextAccount.tokens.map((token) => String(token.token_id));
-      const current =
+
+      const ownedIds = nextAccount.tokens.map((item) => String(item.token_id));
+      const nextTokenId =
         preferredTokenId ||
         (ownedIds.includes(selectedTokenId) ? selectedTokenId : "") ||
         ownedIds[0] ||
         "";
 
-      setAccountState(nextAccount);
-      setSelectedTokenId(current);
-
-      if (current) {
-        setTokenState(await loadTokenState(current));
-      } else {
-        setTokenState(null);
-      }
+      setSelectedTokenId(nextTokenId);
+      setTokenState(nextTokenId ? await loadTokenState(nextTokenId) : null);
     },
     [accountId, selectedTokenId],
   );
 
   useEffect(() => {
-    if (tokenState?.nuviAccount?.status !== "provisioning" || !selectedTokenId) {
-      return undefined;
-    }
-    const id = window.setInterval(() => {
-      void refresh(selectedTokenId);
-    }, 2500);
-    return () => window.clearInterval(id);
-  }, [refresh, selectedTokenId, tokenState?.nuviAccount?.status]);
-
-  useEffect(() => {
     let cancelled = false;
-
     async function boot() {
-      setError("");
-      if (!accountId || !contractsConfigured) {
+      if (!accountId) {
         setAccountState(null);
         setTokenState(null);
+        setSelectedTokenId("");
         return;
       }
       try {
         await refresh();
       } catch (cause) {
-        if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : String(cause));
-        }
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
       }
     }
-
     void boot();
     return () => {
       cancelled = true;
     };
   }, [accountId, refresh]);
 
-  async function fundTestnetWallet() {
+  useEffect(() => {
+    if (!selectedTokenId || tokenState?.nuviAccount?.status !== "provisioning") return undefined;
+    const id = window.setInterval(() => void refresh(selectedTokenId), 1800);
+    return () => window.clearInterval(id);
+  }, [refresh, selectedTokenId, tokenState?.nuviAccount?.status]);
+
+  async function handleDisconnect() {
+    if (busy) return;
+    setBusy("disconnect");
+    setError("");
+    setNotice("");
+    try {
+      await disconnect();
+      setProofTxHash("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function runTx(label, operation) {
+    if (busy) return null;
+
+    const meteorMobile = walletId === "meteor-wallet" && isMobileBrowser();
+    const primed = primeMeteorWebWindow(walletId, label);
+    if (meteorMobile && !primed) {
+      emitWalletDiagnostic("meteor-web-prime-required", { label });
+      setError(t.preparingSignatureBlocked);
+      return null;
+    }
+
+    setBusy(label);
+    setError("");
+    setNotice("");
+    emitWalletDiagnostic("ui-tx-start", {
+      label,
+      walletId: walletId || "unknown",
+      meteorMobile,
+      signingWindowPrimed: primed,
+    });
+
+    try {
+      const result = await operation();
+      const hashes = extractTransactionHashes(result);
+      setNotice(hashes.length ? t.txAccepted : t.verifyingState);
+      await sleep(900);
+      await refresh();
+      await sleep(1100);
+      await refresh();
+      return result;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return null;
+    } finally {
+      releasePrimedMeteorWebWindow();
+      setBusy("");
+    }
+  }
+
+  async function fundWallet() {
     if (!accountId || busy) return;
-    setBusy("Fund Testnet wallet");
+    setBusy("fund");
     setError("");
     setNotice("");
     try {
       const result = await requestDemoFunding(accountId);
       setDemoNearBalance(result.balanceYocto);
-      setNotice("Demo gas funded to 2.0 Testnet NEAR. You can run the full cycle now.");
+      setNotice(t.demoGasFunded);
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -190,659 +233,341 @@ export default function App() {
     }
   }
 
-  async function selectToken(tokenId) {
-    setSelectedTokenId(tokenId);
-    setError("");
-    try {
-      setTokenState(await loadTokenState(tokenId));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
+  const token = [REDACTED] || null;
+  const living = tokenState?.living || null;
+  const mutation = tokenState?.mutation || null;
+  const nuviAccount = tokenState?.nuviAccount || null;
+  const imageUrl = token?.metadata?.media || formMediaUrl(living?.form_id);
+  const form = formLabel(living?.form_id, t);
+  const balanceYocto = BigInt(demoNearBalance || "0");
+  const gasReady = balanceYocto >= DEMO_FUNDING_TARGET_YOCTO;
+  const sponsorEligible =
+    Boolean(accountState) && !accountState.nftClaimUsed && !accountState.nuveClaimUsed;
+  const hasNuvi = Boolean(token && selectedTokenId);
+  const mutationCount = Number(living?.mutation_count || 0);
+  const threshold = Number(
+    mutation?.threshold_xp ?? accountState?.gameConfig?.mutation_threshold_xp ?? 1,
+  );
+  const xp = Number(living?.xp || 0);
+  const mutationReady = Boolean(mutation?.eligible || xp >= threshold);
+  const accountActive = nuviAccount?.status === "active" && nuviAccount?.verified;
+
+  let phase = "connect";
+  if (accountId && !accountState) phase = "loading";
+  else if (accountId && !gasReady && sponsorEligible) phase = "fund";
+  else if (accountId && !hasNuvi) phase = "nft";
+  else if (accountId && !accountState?.nuveClaimUsed) phase = "nuve";
+  else if (accountId && mutationCount === 0 && !mutationReady) phase = "work";
+  else if (accountId && mutationCount === 0) phase = "mutate";
+  else if (accountId && !accountActive) phase = "control";
+  else if (accountId && proofTxHash) phase = "proof";
+  else if (accountId) phase = "control";
+
+  const phaseForProgress = phase === "loading" ? "nft" : phase;
+  const currentIndex = Math.max(0, PHASES.indexOf(phaseForProgress));
+  const currentStep = currentIndex + 1;
+
+  async function chooseWork(action) {
+    const route = action === "work_a" ? "sponsor" : "burn";
+    await runTx(action === "work_a" ? t.workA : t.workB, () =>
+      startLivingAction(connector, {
+        tokenId: selectedTokenId,
+        action,
+        route,
+      }),
+    );
   }
 
-  async function runTx(label, operation) {
-    if (busy) return;
-
-    setBusy(label);
-    setNotice("");
-    setError("");
-
-    try {
-      const result = await operation();
-      const hashes = extractTransactionHashes(result);
-      setActivity((items) => [
-        ...hashes.map((hash) => ({
-          label,
-          hash,
-          at: new Date().toISOString(),
-        })),
-        ...items,
-      ].slice(0, 8));
-
-      setNotice(
-        hashes.length
-          ? `${label}: transaction accepted`
-          : `${label}: wallet flow completed`,
-      );
-
-      await sleep(1_200);
-      await refresh();
-      await sleep(1_800);
-      await refresh();
-      return result;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      throw cause;
-    } finally {
-      setBusy("");
-    }
+  async function proveControl() {
+    const result = await runTx(t.nuviAccountSend1, () =>
+      sendNuviAccountNuve(connector, {
+        nuviAccountId: nuviAccount.accountId,
+        receiverId: accountId,
+        amountNuve: "1.0000",
+      }),
+    );
+    const hashes = extractTransactionHashes(result);
+    if (hashes.length) setProofTxHash(hashes[hashes.length - 1]);
   }
 
-  const token = [REDACTED];
-  const living = tokenState?.living;
-  const mutation = tokenState?.mutation;
-  const nuviAccount = tokenState?.nuviAccount;
-
-  const activeAction = living?.active_action || null;
-  const ready = actionReady(living, nowMs);
-
-  const actionCost = useMemo(() => {
-    const config = accountState?.gameConfig;
-    return {
-      feed: config?.feed_cost || "50000",
-      work_a: config?.work_cost || "100000",
-      work_b: config?.work_cost || "100000",
-    };
-  }, [accountState]);
-
-  const imageUrl = token?.metadata?.media || "";
-  const global = accountState?.alignment;
-  const treasuryPct = Number(global?.treasury_share_bps || 0) / 100;
-  const burnPct = Number(global?.burn_share_bps || 0) / 100;
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <div className="eyebrow">NEAR Hackathon 2026 · Testnet</div>
-          <h1>NUVI Living NFT</h1>
-          <p>One NFT. Persistent identity. Player-shaped evolution.</p>
-        </div>
-
-        <div className="wallet-panel">
-          {walletLoading ? (
-            <span className="status-pill">Wallet loading…</span>
-          ) : accountId ? (
-            <>
-              <ExternalLink href={accountExplorerUrl(accountId)}>
-                <span className="account-id">{shortId(accountId)}</span>
-              </ExternalLink>
-              <button className="button ghost" onClick={() => void disconnect()}>
-                Disconnect
-              </button>
-            </>
+  function PhoneHeader() {
+    return (
+      <>
+        <div className="nuvi-demo-phone-head">
+          <span className="nuvi-demo-step-count">
+            {t.stepLabel} {currentStep}/{PHASES.length}
+          </span>
+          {accountId ? (
+            <ExternalLink href={accountExplorerUrl(accountId)} className="nuvi-demo-wallet">
+              {shortId(accountId, 10, 6)}
+            </ExternalLink>
           ) : (
-            <button className="button primary" onClick={() => void connect()}>
-              Connect NEAR wallet
-            </button>
+            <span className="nuvi-demo-wallet">{t.testnet}</span>
           )}
         </div>
-      </header>
+        <Progress phase={phaseForProgress} t={t} />
+      </>
+    );
+  }
 
-      {!contractsConfigured && (
-        <section className="banner warning">
-          <strong>Testnet deployment is the next gate.</strong>
-          <span>
-            UI is ready for V7 APIs; set VITE_NFT_CONTRACT_ID,
-            VITE_NUVE_CONTRACT_ID and VITE_TREASURY_ID after isolated deployment.
-          </span>
-        </section>
-      )}
-
-      {(walletError || error) && (
-        <section className="banner error">
-          <strong>Action failed</strong>
+  function StatusArea() {
+    if (walletError || error) {
+      return (
+        <div className="nuvi-demo-status error">
+          <strong>{t.actionFailed}</strong>
           <span>{walletError || error}</span>
-        </section>
-      )}
-
-      {notice && (
-        <section className="banner success">
-          <strong>Confirmed</strong>
+        </div>
+      );
+    }
+    if (notice) {
+      return (
+        <div className="nuvi-demo-status success">
+          <strong>{t.confirmed}</strong>
           <span>{notice}</span>
-        </section>
-      )}
+        </div>
+      );
+    }
+    return null;
+  }
 
-      <main className="dashboard">
-        <section className="hero-card">
-          <div className="hero-copy">
-            <span className="status-pill accent">Living NFT · V7 client</span>
-            <h2>Your actions shape the same token.</h2>
-            <p>
-              Feed, work, choose Treasury or Burn, accumulate XP and economic
-              behavior, then mutate the same NEP-171 token into a new form.
-            </p>
-            <div className="contract-row">
-              <ExternalLink href={accountExplorerUrl(appConfig.nftContractId)}>
-                NFT: {shortId(appConfig.nftContractId)}
-              </ExternalLink>
-              <ExternalLink href={accountExplorerUrl(appConfig.nuveContractId)}>
-                NUVE: {shortId(appConfig.nuveContractId)}
-              </ExternalLink>
+  return (
+    <div className="nuvi-demo-app">
+      <div className="nuvi-demo-stage">
+        <section className="nuvi-demo-phone" aria-live="polite">
+          <PhoneHeader />
+          <StatusArea />
+
+          {!contractsConfigured ? (
+            <div className="nuvi-demo-screen centered">
+              <span className="nuvi-demo-kicker">{t.nearHackathon}</span>
+              <h3>{t.deploymentGate}</h3>
+              <p>{t.deploymentInstruction}</p>
             </div>
-          </div>
-          <div className="alignment-mini">
-            <span>Global Alignment</span>
-            <strong>{formatNuve(global?.global_total || "0")} NUVE</strong>
-            <small>
-              Treasury {treasuryPct.toFixed(2)}% · Burn {burnPct.toFixed(2)}%
-            </small>
-          </div>
-        </section>
-
-        {!accountId ? (
-          <section className="empty-state">
-            <div className="orb" />
-            <h2>Connect a Testnet wallet to start.</h2>
-            <p>
-              The demo uses the same wallet connector path proven in NUVELOR,
-              isolated to NEAR Testnet.
-            </p>
-            <button className="button primary large" onClick={() => void connect()}>
-              Connect wallet
-            </button>
-          </section>
-        ) : (
-          <>
-            <section className="grid two">
-              <article className="panel">
-                <div className="panel-head">
-                  <div>
-                    <span className="eyebrow">Onboarding</span>
-                    <h3>Starter assets</h3>
-                  </div>
-                  <span className="nuve-balance">
-                    {formatNear(demoNearBalance)} NEAR · {formatNuve(accountState?.nuveBalance || "0")} NUVE
-                  </span>
-                </div>
-
-                <div className="starter-actions">
-                  <button
-                    className="button ghost"
-                    disabled={
-                      Boolean(busy) ||
-                      BigInt(demoNearBalance || "0") >= DEMO_FUNDING_TARGET_YOCTO ||
-                      accountState?.nftClaimUsed ||
-                      accountState?.nuveClaimUsed
-                    }
-                    onClick={() => void fundTestnetWallet()}
-                  >
-                    {BigInt(demoNearBalance || "0") >= DEMO_FUNDING_TARGET_YOCTO
-                      ? "Testnet gas ready"
-                      : busy === "Fund Testnet wallet"
-                        ? "Funding demo gas…"
-                        : accountState?.nftClaimUsed || accountState?.nuveClaimUsed
-                          ? "Funding available before Starter claim"
-                          : "Get demo gas · up to 2 NEAR"}
-                  </button>
-
-                  <button
-                    className="button primary"
-                    disabled={
-                      !contractsConfigured ||
-                      accountState?.nftClaimUsed ||
-                      BigInt(demoNearBalance || "0") < DEMO_FUNDING_TARGET_YOCTO ||
-                      Boolean(busy)
-                    }
-                    onClick={() =>
-                      void runTx("Claim Starter NUVI", () =>
-                        claimStarterNuvi(connector),
-                      )
-                    }
-                  >
-                    {accountState?.nftClaimUsed
-                      ? "Starter NUVI claimed"
-                      : busy === "Claim Starter NUVI"
-                        ? "Claiming…"
-                        : "Claim Starter NUVI"}
-                  </button>
-
-                  <button
-                    className="button secondary"
-                    disabled={
-                      !contractsConfigured ||
-                      accountState?.nuveClaimUsed ||
-                      BigInt(demoNearBalance || "0") < DEMO_FUNDING_TARGET_YOCTO ||
-                      Boolean(busy)
-                    }
-                    onClick={() =>
-                      void runTx("Claim 100 NUVE", () =>
-                        claimStarterNuve(connector, accountId),
-                      )
-                    }
-                  >
-                    {accountState?.nuveClaimUsed
-                      ? "100 NUVE claimed"
-                      : busy === "Claim 100 NUVE"
-                        ? "Claiming…"
-                        : accountState?.nuveStorage
-                          ? "Claim 100 NUVE"
-                          : "Register + claim 100 NUVE"}
-                  </button>
-                </div>
-                <small>
-                  A fresh wallet needs 2.0 Testnet NEAR. The amount was verified
-                  against the complete cold-start cycle, including Smart Account
-                  provisioning. NUVI tops up the connected Testnet account directly;
-                  no external faucet or page change is required.
-                </small>
-              </article>
-
-              <article className="panel">
-                <div className="panel-head">
-                  <div>
-                    <span className="eyebrow">Community signal</span>
-                    <h3>Global NUVE Alignment</h3>
-                  </div>
-                </div>
-                <div className="alignment-track">
-                  <div
-                    className="alignment-treasury"
-                    style={{ width: `${treasuryPct}%` }}
-                  />
-                  <div
-                    className="alignment-burn"
-                    style={{ width: `${burnPct}%` }}
-                  />
-                </div>
-                <div className="alignment-legend">
-                  <span>
-                    Treasury <strong>{formatNuve(global?.treasury_total || "0")}</strong>
-                  </span>
-                  <span>
-                    Burn <strong>{formatNuve(global?.burn_total || "0")}</strong>
-                  </span>
-                </div>
-              </article>
-            </section>
-
-            {accountState?.tokens?.length > 0 ? (
-              <>
-                <section className="token-picker">
-                  <span>Owned NUVI</span>
-                  <select
-                    value={selectedTokenId}
-                    onChange={(event) => void selectToken(event.target.value)}
-                  >
-                    {accountState.tokens.map((item) => (
-                      <option key={item.token_id} value={item.token_id}>
-                        #{item.token_id} · {item.metadata?.title || "NUVI"}
-                      </option>
-                    ))}
-                  </select>
-                </section>
-
-                <section className="grid nft-layout">
-                  <article className="panel nft-card">
-                    <div className="media-frame">
-                      <div className="visual-fallback">
-                        <span>NUVI</span>
-                        <strong>{formLabel(living?.form_id)}</strong>
-                      </div>
-                      {imageUrl && (
-                        <img
-                          src={imageUrl}
-                          alt={`NUVI ${formLabel(living?.form_id)}`}
-                          onError={(event) => {
-                            event.currentTarget.style.display = "none";
-                          }}
-                        />
-                      )}
-                      <span className="form-badge">
-                        {formLabel(living?.form_id)}
-                      </span>
-                    </div>
-
-                    <div className="nft-title">
-                      <div>
-                        <span className="eyebrow">Token #{selectedTokenId}</span>
-                        <h3>{token?.metadata?.title || "NUVI Starter"}</h3>
-                      </div>
-                      <span className="status-pill">
-                        mutation {living?.mutation_count || 0}/1
-                      </span>
-                    </div>
-
-                    <div className="stats-grid">
-                      <Stat label="Level" value={living?.level ?? "—"} />
-                      <Stat label="XP" value={living?.xp ?? "—"} />
-                      <Stat label="Work A" value={living?.work_a_xp ?? "—"} />
-                      <Stat label="Work B" value={living?.work_b_xp ?? "—"} />
-                      <Stat
-                        label="Sponsor"
-                        value={`${formatNuve(living?.sponsor_spent || "0")} NUVE`}
-                      />
-                      <Stat
-                        label="Burner"
-                        value={`${formatNuve(living?.burner_spent || "0")} NUVE`}
-                      />
-                    </div>
-                  </article>
-
-                  <div className="stack">
-                    <article className="panel">
-                      <div className="panel-head">
-                        <div>
-                          <span className="eyebrow">Economic choice</span>
-                          <h3>Feed / Work</h3>
-                        </div>
-                        {activeAction && (
-                          <span className={`status-pill ${ready ? "ready" : ""}`}>
-                            {ready
-                              ? "Ready"
-                              : countdown(living?.ready_at_ns, nowMs)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="route-switch">
-                        <button
-                          className={route === "sponsor" ? "active" : ""}
-                          disabled={Boolean(activeAction)}
-                          onClick={() => setRoute("sponsor")}
-                        >
-                          Treasury / Sponsor
-                        </button>
-                        <button
-                          className={route === "burn" ? "active" : ""}
-                          disabled={Boolean(activeAction)}
-                          onClick={() => setRoute("burn")}
-                        >
-                          Burn / Burner
-                        </button>
-                      </div>
-
-                      {activeAction ? (
-                        <div className="active-action">
-                          <div>
-                            <span>Active action</span>
-                            <strong>{activeAction.replace("_", " ")}</strong>
-                          </div>
-                          <div>
-                            <span>Completion</span>
-                            <strong>{countdown(living?.ready_at_ns, nowMs)}</strong>
-                          </div>
-                          <button
-                            className="button primary"
-                            disabled={!ready || Boolean(busy)}
-                            onClick={() =>
-                              void runTx("Complete Living action", () =>
-                                completeLivingAction(connector, selectedTokenId),
-                              )
-                            }
-                          >
-                            {ready ? "Complete action" : "Timer running"}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="action-list">
-                          {ACTIONS.map((action) => (
-                            <button
-                              key={action.id}
-                              className="action-card"
-                              disabled={Boolean(busy)}
-                              onClick={() =>
-                                void runTx(`${action.label} / ${route}`, () =>
-                                  startLivingAction(connector, {
-                                    tokenId: selectedTokenId,
-                                    action: action.id,
-                                    route,
-                                  }),
-                                )
-                              }
-                            >
-                              <span>
-                                <strong>{action.label}</strong>
-                                <small>{action.detail}</small>
-                              </span>
-                              <b>{formatNuve(actionCost[action.id])} NUVE</b>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </article>
-
-                    <article className="panel">
-                      <div className="panel-head">
-                        <div>
-                          <span className="eyebrow">Evolution</span>
-                          <h3>Mutation preview</h3>
-                        </div>
-                        <span className="status-pill">
-                          XP {mutation?.xp ?? 0}/{mutation?.threshold_xp ?? 5}
-                        </span>
-                      </div>
-
-                      <div className="probability">
-                        <div>
-                          <span>Form A</span>
-                          <strong>
-                            {((mutation?.form_a_probability_bps || 0) / 100).toFixed(2)}%
-                          </strong>
-                        </div>
-                        <div className="probability-track">
-                          <span
-                            style={{
-                              width: `${(mutation?.form_a_probability_bps || 0) / 100}%`,
-                            }}
-                          />
-                        </div>
-                        <small>
-                          Work A {mutation?.work_a_xp || 0} · Sponsor level{" "}
-                          {mutation?.sponsor_level || 0}
-                        </small>
-                      </div>
-
-                      <div className="probability">
-                        <div>
-                          <span>Form B</span>
-                          <strong>
-                            {((mutation?.form_b_probability_bps || 0) / 100).toFixed(2)}%
-                          </strong>
-                        </div>
-                        <div className="probability-track b">
-                          <span
-                            style={{
-                              width: `${(mutation?.form_b_probability_bps || 0) / 100}%`,
-                            }}
-                          />
-                        </div>
-                        <small>
-                          Work B {mutation?.work_b_xp || 0} · Burner level{" "}
-                          {mutation?.burner_level || 0}
-                        </small>
-                      </div>
-
-                      <button
-                        className="button mutation"
-                        disabled={!mutation?.eligible || Boolean(busy)}
-                        onClick={() =>
-                          void runTx("Mutate NUVI", () =>
-                            mutateNuvi(connector, selectedTokenId),
-                          )
-                        }
-                      >
-                        {living?.mutation_count
-                          ? "MVP mutation complete"
-                          : mutation?.eligible
-                            ? "Mutate NUVI"
-                            : `Complete ${mutation?.threshold_xp ?? 1} Work cycle${(mutation?.threshold_xp ?? 1) === 1 ? "" : "s"} to mutate`}
-                      </button>
-                    </article>
-
-                    <article className="panel nuvi-account-panel">
-                      <div className="panel-head">
-                        <div>
-                          <span className="eyebrow">NFT-controlled account</span>
-                          <h3>NUVI Account</h3>
-                        </div>
-                        <span className={`status-pill ${nuviAccount?.status === "active" ? "ready" : ""}`}>
-                          {nuviAccount?.status === "not_created"
-                            ? "Not created"
-                            : nuviAccount?.status === "provisioning"
-                              ? "Provisioning"
-                              : nuviAccount?.status === "active"
-                                ? "Active"
-                                : nuviAccount?.status === "failed"
-                                  ? "Failed"
-                                  : "—"}
-                        </span>
-                      </div>
-
-                      <div className="account-address">
-                        <span>Smart account</span>
-                        <ExternalLink href={accountExplorerUrl(nuviAccount?.accountId)}>
-                          <strong>{nuviAccount?.accountId || "—"}</strong>
-                        </ExternalLink>
-                      </div>
-
-                      <div className="stats-grid account-proof-grid">
-                        <Stat label="Bound NFT" value={`NUVI #${selectedTokenId}`} />
-                        <Stat label="Controller" value={token?.owner_id || "—"} />
-                        <Stat
-                          label="Access keys"
-                          value={
-                            Array.isArray(nuviAccount?.accessKeys)
-                              ? `${nuviAccount.accessKeys.length} · ${nuviAccount.accessKeys.length === 0 ? "Locked" : "Unexpected"}`
-                              : "—"
-                          }
-                        />
-                        <Stat
-                          label="Executor"
-                          value={nuviAccount?.verified ? "Deployed · verified" : nuviAccount?.executor ? "Deployed" : "—"}
-                        />
-                        <Stat label="NUVE balance" value={`${formatNuve(nuviAccount?.nuveBalance || "0")} NUVE`} />
-                        <Stat label="NFT metadata" value={nuviAccount?.metadataStatus || "—"} />
-                      </div>
-
-                      {nuviAccount?.status === "failed" && (
-                        <div className="banner error account-failure">
-                          Provisioning failed{nuviAccount?.failurePhase ? `: ${nuviAccount.failurePhase}` : ""}.
-                        </div>
-                      )}
-
-                      {nuviAccount?.status === "active" && (
-                        <div className="nuvi-transfer">
-                          <button
-                            className="button primary"
-                            disabled={Boolean(busy) || !accountId}
-                            onClick={() =>
-                              void runTx("NUVI Account · Send 1 NUVE", () =>
-                                sendNuviAccountNuve(connector, {
-                                  nuviAccountId: nuviAccount.accountId,
-                                  receiverId: accountId,
-                                  amountNuve: "1.0000",
-                                }),
-                              )
-                            }
-                          >
-                            Send 1 NUVE to my wallet
-                          </button>
-
-                          <details className="advanced-transfer">
-                            <summary>Custom Testnet transfer</summary>
-                            <div className="transfer-fields">
-                              <label>
-                                Recipient
-                                <input
-                                  value={nuviRecipient}
-                                  onChange={(event) => setNuviRecipient(event.target.value)}
-                                  placeholder="account.testnet"
-                                />
-                              </label>
-                              <label>
-                                Amount (NUVE)
-                                <input
-                                  value={nuviAmount}
-                                  onChange={(event) => setNuviAmount(event.target.value)}
-                                  inputMode="decimal"
-                                />
-                              </label>
-                              <button
-                                className="button secondary"
-                                disabled={Boolean(busy) || !nuviRecipient || !nuviAmount}
-                                onClick={() =>
-                                  void runTx("NUVI Account · Custom transfer", () =>
-                                    sendNuviAccountNuve(connector, {
-                                      nuviAccountId: nuviAccount.accountId,
-                                      receiverId: nuviRecipient.trim(),
-                                      amountNuve: nuviAmount,
-                                    }),
-                                  )
-                                }
-                              >
-                                Send from NUVI Account
-                              </button>
-                            </div>
-                          </details>
-                        </div>
-                      )}
-                    </article>
-                  </div>
-                </section>
-              </>
-            ) : (
-              <section className="empty-state compact">
-                <h2>No NUVI in this wallet yet.</h2>
-                <p>Claim the one-time starter NFT to enter the gameplay loop.</p>
-              </section>
-            )}
-
-            <section className="panel evidence">
-              <div className="panel-head">
-                <div>
-                  <span className="eyebrow">Judge evidence</span>
-                  <h3>Recent transactions</h3>
-                </div>
+          ) : phase === "loading" ? (
+            <div className="nuvi-demo-screen centered">
+              <div className="nuvi-demo-spinner" aria-hidden="true" />
+              <h3>{t.loadingStateTitle}</h3>
+              <p>{t.loadingStateDescription}</p>
+            </div>
+          ) : phase === "connect" ? (
+            <div className="nuvi-demo-screen centered">
+              <NuviVisual
+                imageUrl="/assets/hackathon/nuvi/basic.webp"
+                form={t.basic}
+                tokenId=""
+                ghost
+              />
+              <span className="nuvi-demo-kicker">{t.steps.connect}</span>
+              <h3>{t.connectTitle}</h3>
+              <p>{t.connectDescription}</p>
+              <button
+                className="nuvi-demo-primary"
+                disabled={walletLoading}
+                onClick={() => void connect()}
+              >
+                {walletLoading ? t.walletLoading : t.connectWallet}
+              </button>
+              <small>{t.testnetOnly}</small>
+            </div>
+          ) : phase === "fund" ? (
+            <div className="nuvi-demo-screen centered">
+              <div className="nuvi-demo-gas-ring">
+                <span>{t.balance}</span>
+                <strong>{formatNear(demoNearBalance)} NEAR</strong>
+                <small>{t.targetBalance}</small>
+              </div>
+              <span className="nuvi-demo-kicker">{t.steps.fund}</span>
+              <h3>{t.sponsorTitle}</h3>
+              <p>{t.sponsorDescription}</p>
+              <button
+                className="nuvi-demo-primary"
+                disabled={Boolean(busy)}
+                onClick={() => void fundWallet()}
+              >
+                {busy === "fund" ? t.fundingDemoGas : t.getDemoGas}
+              </button>
+              <small>{t.sponsorSafety}</small>
+            </div>
+          ) : phase === "nft" ? (
+            <div className="nuvi-demo-screen centered">
+              <NuviVisual
+                imageUrl="/assets/hackathon/nuvi/basic.webp"
+                form={t.basic}
+                tokenId=""
+                ghost
+              />
+              <span className="nuvi-demo-kicker">{t.steps.nft}</span>
+              <h3>{t.claimNftTitle}</h3>
+              <p>{t.claimNftDescription}</p>
+              <button
+                className="nuvi-demo-primary"
+                disabled={Boolean(busy)}
+                onClick={() => void runTx(t.claimStarter, () => claimStarterNuvi(connector))}
+              >
+                {busy ? t.signing : t.claimStarter}
+              </button>
+              <small>{t.claimNftHint}</small>
+            </div>
+          ) : phase === "nuve" ? (
+            <div className="nuvi-demo-screen centered">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <span className="nuvi-demo-kicker">{t.steps.nuve}</span>
+              <h3>{t.claimNuveTitle}</h3>
+              <p>{t.claimNuveDescription}</p>
+              <div className="nuvi-demo-fact-row">
+                <span>{t.owner}</span>
+                <strong>{shortId(token?.owner_id || accountId, 14, 8)}</strong>
+              </div>
+              <button
+                className="nuvi-demo-primary"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void runTx(t.claimNuve, () => claimStarterNuve(connector, accountId))
+                }
+              >
+                {busy ? t.signing : t.claimNuve}
+              </button>
+            </div>
+          ) : phase === "work" ? (
+            <div className="nuvi-demo-screen">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <span className="nuvi-demo-kicker">{t.steps.work}</span>
+              <h3>{t.workChoiceTitle}</h3>
+              <p>{t.workChoiceDescription}</p>
+              <div className="nuvi-demo-choice-grid">
                 <button
-                  className="button ghost"
+                  className="nuvi-demo-choice a"
                   disabled={Boolean(busy)}
-                  onClick={() => void refresh()}
+                  onClick={() => void chooseWork("work_a")}
                 >
-                  Refresh state
+                  <strong>{t.workA}</strong>
+                  <span>{t.workAChoice}</span>
+                  <small>{formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE</small>
+                </button>
+                <button
+                  className="nuvi-demo-choice b"
+                  disabled={Boolean(busy)}
+                  onClick={() => void chooseWork("work_b")}
+                >
+                  <strong>{t.workB}</strong>
+                  <span>{t.workBChoice}</span>
+                  <small>{formatNuve(accountState?.gameConfig?.work_cost || "100000")} NUVE</small>
                 </button>
               </div>
-
-              {activity.length ? (
-                <div className="activity-list">
-                  {activity.map((item) => (
-                    <ExternalLink
-                      href={txExplorerUrl(item.hash)}
-                      key={`${item.hash}-${item.at}`}
-                    >
-                      <span>{item.label}</span>
-                      <code>{shortId(item.hash, 14, 10)}</code>
-                    </ExternalLink>
-                  ))}
+              <small className="nuvi-demo-note">{t.workRandomHint}</small>
+            </div>
+          ) : phase === "mutate" ? (
+            <div className="nuvi-demo-screen">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <span className="nuvi-demo-kicker">{t.steps.mutate}</span>
+              <h3>{t.mutationStepTitle}</h3>
+              <p>{t.mutationStepDescription}</p>
+              <div className="nuvi-demo-probabilities">
+                <div>
+                  <span>{t.formA}</span>
+                  <strong>
+                    {((mutation?.form_a_probability_bps || 0) / 100).toFixed(2)}%
+                  </strong>
                 </div>
-              ) : (
-                <p className="muted">
-                  Transaction hashes from this session will appear here with Testnet explorer links.
-                </p>
+                <div>
+                  <span>{t.formB}</span>
+                  <strong>
+                    {((mutation?.form_b_probability_bps || 0) / 100).toFixed(2)}%
+                  </strong>
+                </div>
+              </div>
+              <div className="nuvi-demo-fact-row">
+                <span>{t.xp}</span>
+                <strong>{xp}/{threshold}</strong>
+              </div>
+              <button
+                className="nuvi-demo-primary mutation"
+                disabled={!mutationReady || Boolean(busy)}
+                onClick={() =>
+                  void runTx(t.mutateNuvi, () => mutateNuvi(connector, selectedTokenId))
+                }
+              >
+                {busy ? t.signing : t.mutateNuvi}
+              </button>
+              <small className="nuvi-demo-note">{t.mutationRandomHint}</small>
+            </div>
+          ) : phase === "control" && !accountActive ? (
+            <div className="nuvi-demo-screen centered">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <div className="nuvi-demo-spinner" aria-hidden="true" />
+              <span className="nuvi-demo-kicker">{t.steps.control}</span>
+              <h3>{t.provisionTitle}</h3>
+              <p>{t.provisionDescription}</p>
+              <div className="nuvi-demo-proof-box">
+                <span>{t.smartAccount}</span>
+                <strong>{shortId(nuviAccount?.accountId || nuviAccount?.expectedId, 18, 10)}</strong>
+              </div>
+              <small>{t.provisionHint}</small>
+            </div>
+          ) : phase === "control" ? (
+            <div className="nuvi-demo-screen">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <span className="nuvi-demo-kicker">{t.steps.control}</span>
+              <h3>{t.controlTitle}</h3>
+              <p>{t.controlDescription}</p>
+              <div className="nuvi-demo-proof-grid">
+                <div><span>{t.smartAccount}</span><strong>{shortId(nuviAccount?.accountId, 15, 8)}</strong></div>
+                <div><span>{t.nuviAccountAccessKeys}</span><strong>{Array.isArray(nuviAccount?.accessKeys) ? nuviAccount.accessKeys.length : "—"}</strong></div>
+                <div><span>{t.controller}</span><strong>{shortId(token?.owner_id, 12, 7)}</strong></div>
+                <div><span>{t.nuviAccountBalance}</span><strong>{formatNuve(nuviAccount?.nuveBalance || "0")} NUVE</strong></div>
+              </div>
+              <button
+                className="nuvi-demo-primary"
+                disabled={Boolean(busy) || !accountActive}
+                onClick={() => void proveControl()}
+              >
+                {busy ? t.signing : t.nuviAccountSend1}
+              </button>
+              <small className="nuvi-demo-note">{t.controlHint}</small>
+            </div>
+          ) : (
+            <div className="nuvi-demo-screen centered proof">
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <span className="nuvi-demo-success-mark" aria-hidden="true">✓</span>
+              <span className="nuvi-demo-kicker">{t.steps.proof}</span>
+              <h3>{t.proofCompleteTitle}</h3>
+              <p>{t.proofCompleteDescription}</p>
+              <div className="nuvi-demo-proof-grid compact">
+                <div><span>{t.nftIdentity}</span><strong>#{selectedTokenId}</strong></div>
+                <div><span>{t.nuviAccountAccessKeys}</span><strong>0</strong></div>
+                <div><span>{t.controller}</span><strong>{shortId(token?.owner_id, 12, 7)}</strong></div>
+                <div><span>{t.execution}</span><strong>{t.verified}</strong></div>
+              </div>
+              <div className="nuvi-demo-actions">
+                <ExternalLink className="nuvi-demo-secondary" href={txExplorerUrl(proofTxHash)}>
+                  {t.viewTransaction}
+                </ExternalLink>
+                <ExternalLink className="nuvi-demo-secondary" href={accountExplorerUrl(nuviAccount?.accountId)}>
+                  {t.viewAccount}
+                </ExternalLink>
+              </div>
+              <button
+                className="nuvi-demo-link-button"
+                disabled={Boolean(busy)}
+                onClick={() => void handleDisconnect()}
+              >
+                {t.tryAnotherWallet}
+              </button>
+            </div>
+          )}
+
+          {accountId && phase !== "proof" && (
+            <div className="nuvi-demo-phone-foot">
+              <span>{formatNear(demoNearBalance)} NEAR</span>
+              {hasNuvi && <span>NUVI #{selectedTokenId}</span>}
+              {accountState?.nuveClaimUsed && (
+                <span>{formatNuve(accountState?.nuveBalance || "0")} NUVE</span>
               )}
-            </section>
-          </>
-        )}
+            </div>
+          )}
+        </section>
+      </div>
 
-        <VerifiedProof />
-      </main>
-
-      <footer>
-        <span>NUVI Living NFT · isolated Hackathon Testnet demo</span>
-        <ExternalLink href={accountExplorerUrl(appConfig.treasuryId)}>
-          Treasury {shortId(appConfig.treasuryId)}
-        </ExternalLink>
-      </footer>
     </div>
   );
 }

@@ -62,14 +62,14 @@ function ExternalLink({ href, children, className = "" }) {
   );
 }
 
-function NuviVisual({ imageUrl, form, tokenId, ghost = false }) {
+function NuviVisual({ imageUrl, form, tokenId, ghost = false, showForm = true }) {
   return (
     <div className={"nuvi-demo-visual" + (ghost ? " is-ghost" : "")}>
       <div className="nuvi-demo-orbit" aria-hidden="true" />
       <img src={imageUrl} alt={"NUVI " + form} />
       <div className="nuvi-demo-visual-meta">
         <strong>{tokenId ? "NUVI #" + tokenId : "NUVI"}</strong>
-        <span>{form}</span>
+        {showForm && <span>{form}</span>}
       </div>
     </div>
   );
@@ -505,7 +505,7 @@ export default function DemoApp({ locale = "en" }) {
             </div>
           ) : phase === "control" && !accountActive ? (
             <div className="nuvi-demo-screen centered">
-              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} showForm={false} />
               <div className="nuvi-demo-spinner" aria-hidden="true" />
               <span className="nuvi-demo-kicker">{t.steps.control}</span>
               <h3>{t.provisionTitle}</h3>
@@ -518,7 +518,7 @@ export default function DemoApp({ locale = "en" }) {
             </div>
           ) : phase === "control" ? (
             <div className="nuvi-demo-screen">
-              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} />
+              <NuviVisual imageUrl={imageUrl} form={form} tokenId={selectedTokenId} showForm={false} />
               <span className="nuvi-demo-kicker">{t.steps.control}</span>
               <h3>{t.controlTitle}</h3>
               <p>{t.controlDescription}</p>
